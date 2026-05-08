@@ -1,0 +1,196 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-head">
+  <h1>文章偏好画像</h1>
+  <p>基于你在 Articles 页面中的 关注 / 忽略 / 中性 标注，自动生成偏好总结，并用于指导后续日报选稿。</p>
+</div>
+
+<div class="grid cols-4">
+  <div class="card">
+    <div class="card-title">已标注文章</div>
+    <div class="metric">{{ profile.labeled_count or 0 }}</div>
+  </div>
+  <div class="card">
+    <div class="card-title">关注</div>
+    <div class="metric" style="color:var(--good);">{{ profile.follow_count or 0 }}</div>
+  </div>
+  <div class="card">
+    <div class="card-title">忽略</div>
+    <div class="metric" style="color:var(--bad);">{{ profile.ignore_count or 0 }}</div>
+  </div>
+  <div class="card">
+    <div class="card-title">中性</div>
+    <div class="metric" style="color:var(--brand);">{{ profile.neutral_count or 0 }}</div>
+  </div>
+  <div class="card">
+    <div class="card-title">最近更新时间</div>
+    <div style="font-weight:700;margin-top:8px;">{{ profile.updated_at or '未生成' }}</div>
+    <form method="post" action="/article-preferences/refresh" style="margin-top:12px;">
+      <input type="hidden" name="next" value="{{ request.url.path }}">
+      <button type="submit">手动刷新画像</button>
+    </form>
+  </div>
+</div>
+
+<div class="grid cols-2">
+  <div class="card">
+    <h3 style="margin-top:0;">AI 偏好总结</h3>
+    <div class="stack">
+      <div class="report-link-card">{{ (profile.ai_summary.summary if profile.ai_summary else '') or '暂无 AI 总结' }}</div>
+      <div>
+        <div class="muted" style="margin-bottom:6px;">更可能持续关注</div>
+        {% if profile.ai_summary and profile.ai_summary.likes %}
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">{% for item in profile.ai_summary.likes %}<span class="badge good">{{ item }}</span>{% endfor %}</div>
+        {% else %}
+          <div class="muted">暂无明显结论</div>
+        {% endif %}
+      </div>
+      <div>
+        <div class="muted" style="margin-bottom:6px;">更可能忽略</div>
+        {% if profile.ai_summary and profile.ai_summary.dislikes %}
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">{% for item in profile.ai_summary.dislikes %}<span class="badge bad">{{ item }}</span>{% endfor %}</div>
+        {% else %}
+          <div class="muted">暂无明显结论</div>
+        {% endif %}
+      </div>
+      <div>
+        <div class="muted" style="margin-bottom:6px;">后续选稿建议</div>
+        {% if profile.ai_summary and profile.ai_summary.selection_advice %}
+          <ul class="report-list">{% for item in profile.ai_summary.selection_advice %}<li>{{ item }}</li>{% endfor %}</ul>
+        {% else %}
+          <div class="muted">暂无建议</div>
+        {% endif %}
+      </div>
+      {% if profile.ai_model_used %}
+        <div class="muted">模型：{{ profile.ai_model_used }}{% if profile.ai_fallback_used %}（已走 fallback）{% endif %}</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0;">AI 结构化规则</h3>
+    <div class="stack">
+      <div>
+        <div class="muted" style="margin-bottom:6px;">方向提权</div>
+        {% if profile.ai_rules and profile.ai_rules.boost_directions %}
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">{% for item in profile.ai_rules.boost_directions %}<span class="badge good">{{ item.direction }} +{{ item.weight }}</span>{% endfor %}</div>
+        {% else %}
+          <div class="muted">暂无</div>
+        {% endif %}
+      </div>
+      <div>
+        <div class="muted" style="margin-bottom:6px;">方向压低</div>
+        {% if profile.ai_rules and profile.ai_rules.suppress_directions %}
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">{% for item in profile.ai_rules.suppress_directions %}<span class="badge bad">{{ item.direction }} -{{ item.weight }}</span>{% endfor %}</div>
+        {% else %}
+          <div class="muted">暂无</div>
+        {% endif %}
+      </div>
+      <div>
+        <div class="muted" style="margin-bottom:6px;">来源修正</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          {% if profile.ai_rules and profile.ai_rules.boost_sources %}{% for item in profile.ai_rules.boost_sources %}<span class="badge good">{{ item.source }} +{{ item.weight }}</span>{% endfor %}{% endif %}
+          {% if profile.ai_rules and profile.ai_rules.suppress_sources %}{% for item in profile.ai_rules.suppress_sources %}<span class="badge bad">{{ item.source }} -{{ item.weight }}</span>{% endfor %}{% endif %}
+        </div>
+      </div>
+      <div>
+        <div class="muted" style="margin-bottom:6px;">主题词修正</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          {% if profile.ai_rules and profile.ai_rules.boost_terms %}{% for item in profile.ai_rules.boost_terms %}<span class="badge good">{{ item.term }} +{{ item.weight }}</span>{% endfor %}{% endif %}
+          {% if profile.ai_rules and profile.ai_rules.suppress_terms %}{% for item in profile.ai_rules.suppress_terms %}<span class="badge bad">{{ item.term }} -{{ item.weight }}</span>{% endfor %}{% endif %}
+        </div>
+      </div>
+      {% if profile.ai_rules_model_used %}
+        <div class="muted">规则模型：{{ profile.ai_rules_model_used }}{% if profile.ai_rules_fallback_used %}（已走 fallback）{% endif %}</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0;">偏好来源</h3>
+    <div class="stack">
+      <div>
+        <div class="muted" style="margin-bottom:6px;">更常关注的来源</div>
+        {% if profile.preferred_sources %}
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">{% for item in profile.preferred_sources %}<span class="badge good">{{ item }}</span>{% endfor %}</div>
+        {% else %}
+          <div class="muted">暂无明显偏好来源</div>
+        {% endif %}
+      </div>
+      <div>
+        <div class="muted" style="margin-bottom:6px;">更常忽略的来源</div>
+        {% if profile.ignored_sources %}
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">{% for item in profile.ignored_sources %}<span class="badge bad">{{ item }}</span>{% endfor %}</div>
+        {% else %}
+          <div class="muted">暂无明显忽略来源</div>
+        {% endif %}
+      </div>
+      <div>
+        <div class="muted" style="margin-bottom:6px;">中性来源（仅记录，不明显影响选稿）</div>
+        {% if profile.neutral_sources %}
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">{% for item in profile.neutral_sources %}<span class="badge">{{ item }}</span>{% endfor %}</div>
+        {% else %}
+          <div class="muted">暂无明显中性来源</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0;">偏好主题词</h3>
+    <div class="stack">
+      <div>
+        <div class="muted" style="margin-bottom:6px;">更偏好的主题词</div>
+        {% if profile.preferred_terms %}
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">{% for item in profile.preferred_terms[:20] %}<span class="badge good">{{ item }}</span>{% endfor %}</div>
+        {% else %}
+          <div class="muted">暂无明显偏好主题词</div>
+        {% endif %}
+      </div>
+      <div>
+        <div class="muted" style="margin-bottom:6px;">更常忽略的主题词</div>
+        {% if profile.ignored_terms %}
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">{% for item in profile.ignored_terms[:20] %}<span class="badge bad">{{ item }}</span>{% endfor %}</div>
+        {% else %}
+          <div class="muted">暂无明显忽略主题词</div>
+        {% endif %}
+      </div>
+      <div>
+        <div class="muted" style="margin-bottom:6px;">中性主题词</div>
+        {% if profile.neutral_terms %}
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">{% for item in profile.neutral_terms[:20] %}<span class="badge">{{ item }}</span>{% endfor %}</div>
+        {% else %}
+          <div class="muted">暂无明显中性主题词</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="grid cols-2">
+  <div class="card">
+    <h3 style="margin-top:0;">画像描述（AI 总结 + 规则统计）</h3>
+    <pre style="white-space:pre-wrap;word-break:break-word;background:#f8fafc;border:1px solid var(--line);padding:14px;border-radius:14px;line-height:1.7;">{{ profile.description or '暂无画像描述' }}</pre>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0;">最近标注的文章</h3>
+    <div class="stack">
+      {% for a in recent_articles %}
+        <div style="padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:#fff;">
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">
+            <div>
+              <div style="font-weight:700;"><a class="report-link-title source-link" href="{{ a.article_url }}" target="_blank">{{ a.title }}</a></div>
+              <div class="muted" style="margin-top:6px;">{{ a.account_name or '未知公众号' }}</div>
+            </div>
+            <span class="badge {{ a.pref_meta.badge }}">{{ a.pref_meta.label }}</span>
+          </div>
+          <div class="muted" style="margin-top:6px;font-size:12px;">{{ a.user_pref_updated_at or '' }}</div>
+        </div>
+      {% else %}
+        <div class="muted">还没有任何关注 / 忽略 / 中性 标注。</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

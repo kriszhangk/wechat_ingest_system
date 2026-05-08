@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-head">
+  <h1>日报中心</h1>
+  <p>查看已生成的早报 / 晚报，支持按类型与日期归档快速检索。</p>
+</div>
+<form method="get" class="search-form compact">
+  <div class="field">
+    <label>类型</label>
+    <select name="report_type">
+      <option value="">全部</option>
+      <option value="morning" {% if report_type == 'morning' %}selected{% endif %}>早报</option>
+      <option value="evening" {% if report_type == 'evening' %}selected{% endif %}>晚报</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>日期</label>
+    <input type="date" name="report_date" value="{{ report_date or '' }}">
+  </div>
+  <div style="display:flex;align-items:end;"><button type="submit">筛选</button></div>
+</form>
+<div class="grid cols-2">
+  {% for r in reports %}
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;">
+      <div>
+        {% if r.report_type == 'morning' %}
+          <span class="badge good">早报</span>
+        {% else %}
+          <span class="badge warn">晚报</span>
+        {% endif %}
+        <span class="muted">#{{ r.id }}</span>
+      </div>
+      <a href="/reports/{{ r.id }}">查看详情</a>
+    </div>
+    <div style="margin-top:10px;font-weight:700;">{{ r.created_at }}</div>
+    <div class="muted" style="margin-top:4px;">窗口：{{ r.window_start }} → {{ r.window_end }}</div>
+    <div style="margin-top:12px;" class="stack">
+      {% for bullet in r.summary_bullets %}
+        <div>• {{ bullet }}</div>
+      {% endfor %}
+      {% if not r.summary_bullets %}
+        <div class="muted">暂无摘要提取</div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+<div class="pager">
+  <span>共 {{ total }} 条，第 {{ page }} / {{ total_pages }} 页</span>
+  {% if has_prev %}<a href="/reports?page={{ page - 1 }}{% if report_type %}&report_type={{ report_type }}{% endif %}{% if report_date %}&report_date={{ report_date }}{% endif %}">上一页</a>{% endif %}
+  {% if has_next %}<a href="/reports?page={{ page + 1 }}{% if report_type %}&report_type={{ report_type }}{% endif %}{% if report_date %}&report_date={{ report_date }}{% endif %}">下一页</a>{% endif %}
+</div>
+{% endblock %}

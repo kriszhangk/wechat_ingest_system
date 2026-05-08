@@ -1,0 +1,56 @@
+# Secrets / local config
+.env
+.env.*
+!.env.example
+wechat_official_account.json
+*_cookie*.txt
+*cookie*.json
+*token*.json
+*secret*.json
+
+# Runtime state and databases
+report_state.json
+server/data/
+*.db
+*.sqlite
+*.sqlite3
+*.log
+*.pid
+
+# Generated reports / media / temp artifacts
+report_*.txt
+report_*.json
+send_report_*.log
+wechat_articles/
+wechat_assets/
+debug/
+tmp/
+_tmp/
+worker.zip
+*.zip
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Node / browser automation local state
+node_modules/
+playwright-report/
+test-results/
+
+# ByteRover local agent memory
+.brv/
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
+
+# Local temporary message exports
+_msg_tmp.txt

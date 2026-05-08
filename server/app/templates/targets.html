@@ -1,0 +1,337 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-head">
+  <h1>公众号 Targets</h1>
+  <p>管理抓取目标。新增表单默认折叠，需要时再展开，避免页面长期拥挤。</p>
+</div>
+
+<script>
+function targetsCollectSelectedIds() {
+  return Array.from(document.querySelectorAll('input[name="target_row_select"]:checked')).map(el => el.value);
+}
+
+function targetsRefreshSelectionUI() {
+  const ids = targetsCollectSelectedIds();
+  const count = ids.length;
+  const countNode = document.getElementById('targets-selected-count');
+  if (countNode) countNode.textContent = String(count);
+  document.querySelectorAll('input[data-selected-target-ids]').forEach(el => {
+    el.value = ids.join(',');
+  });
+  const master = document.getElementById('targets-select-all');
+  if (master) {
+    const rows = Array.from(document.querySelectorAll('input[name="target_row_select"]'));
+    master.checked = rows.length > 0 && rows.every(el => el.checked);
+    master.indeterminate = count > 0 && !master.checked;
+  }
+}
+
+function targetsToggleSelectAll(checked) {
+  document.querySelectorAll('input[name="target_row_select"]').forEach(el => {
+    el.checked = checked;
+  });
+  targetsRefreshSelectionUI();
+}
+
+function targetsClearSelection() {
+  targetsToggleSelectAll(false);
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  targetsRefreshSelectionUI();
+});
+</script>
+
+<div class="card" style="margin-bottom:18px;">
+  <div style="display:flex;gap:12px;flex-wrap:wrap;">
+    <button type="button" onclick="document.getElementById('single-create').toggleAttribute('open')">单个新增</button>
+    <button type="button" onclick="document.getElementById('batch-create').toggleAttribute('open')">批量新增</button>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:18px;">
+  <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between;">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <span class="badge">已选 <span id="targets-selected-count">0</span> 项</span>
+      <span class="muted">勾选行后，顶部批量操作会优先只作用于选中项；未勾选时继续按“仅启用中 / 全部”规则生效。</span>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button type="button" onclick="targetsToggleSelectAll(true)">全选本页</button>
+      <button type="button" onclick="targetsClearSelection()">清空选择</button>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:18px;">
+  <h3 style="margin-top:0;margin-bottom:8px;">搜索 / 筛选</h3>
+  <p class="muted" style="margin-top:0;">支持按名称或关键词搜索，并按启用状态、优先级区间筛选。分页和每页数量会保留当前筛选条件。</p>
+  <form method="get" action="/targets" class="toolbar" style="margin-top:12px;grid-template-columns:2fr 1fr 1fr 1fr auto auto;align-items:end;">
+    <input type="hidden" name="page" value="1">
+    <input type="hidden" name="page_size" value="{{ page_size }}">
+    <div class="field" style="margin:0;">
+      <label>名称 / 关键词</label>
+      <input name="q" value="{{ filters.q }}" placeholder="公众号名称、关键词、resolved 名称">
+    </div>
+    <div class="field" style="margin:0;">
+      <label>启用状态</label>
+      <select name="enabled">
+        <option value="" {% if filters.enabled == '' %}selected{% endif %}>全部</option>
+        <option value="1" {% if filters.enabled == '1' %}selected{% endif %}>仅启用</option>
+        <option value="0" {% if filters.enabled == '0' %}selected{% endif %}>仅停用</option>
+      </select>
+    </div>
+    <div class="field" style="margin:0;">
+      <label>优先级最小值</label>
+      <input name="priority_min" type="number" min="0" value="{{ filters.priority_min }}" placeholder="例如 8">
+    </div>
+    <div class="field" style="margin:0;">
+      <label>优先级最大值</label>
+      <input name="priority_max" type="number" min="0" value="{{ filters.priority_max }}" placeholder="例如 12">
+    </div>
+    <button type="submit">应用筛选</button>
+    <a href="/targets" class="button-link">重置</a>
+  </form>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">
+    <span class="badge">筛选结果 {{ total }} / {{ total_all }}</span>
+    {% if active_filter_count > 0 %}
+      <span class="badge warn">已启用 {{ active_filter_count }} 个筛选条件</span>
+    {% else %}
+      <span class="badge good">当前未加筛选</span>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:18px;">
+  <h3 style="margin-top:0;margin-bottom:8px;">批量修改最近下发时间</h3>
+  <p class="muted" style="margin-top:0;">用来批量重置 targets 的 <code>last_dispatched_at</code>。清空后，worker 下次 poll 时会把这些目标视为“从未下发”，更容易立即重新拿到任务。</p>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+    <span class="badge warn">待强制重跑 {{ force_pending_total }}</span>
+    <span class="badge">启用中待重跑 {{ force_pending_enabled }}</span>
+  </div>
+  <div class="toolbar" style="margin-top:12px;grid-template-columns:repeat(3,1fr);align-items:end;">
+    <form method="post" action="/targets/batch_update_dispatch_time" class="stack" style="margin:0;">
+      <input type="hidden" name="mode" value="clear">
+      <input type="hidden" name="selected_target_ids" value="" data-selected-target-ids>
+      <label style="display:flex;gap:8px;align-items:center;font-size:14px;color:#374151;">
+        <input type="checkbox" name="enabled_only" value="1" checked style="width:auto;">仅修改启用中的 targets
+      </label>
+      <button type="submit" onclick="return confirm('确认清空最近下发时间吗？清空后这些目标会很快重新进入下发队列。')">清空最近下发时间</button>
+    </form>
+
+    <form method="post" action="/targets/batch_update_dispatch_time" class="stack" style="grid-column: span 2; margin:0;">
+      <input type="hidden" name="mode" value="set">
+      <input type="hidden" name="selected_target_ids" value="" data-selected-target-ids>
+      <div class="toolbar" style="margin:0;grid-template-columns:2fr 1fr auto;align-items:end;">
+        <div class="field" style="margin:0;">
+          <label>批量设置为指定时间</label>
+          <input name="dispatch_at" type="datetime-local" step="1" required>
+        </div>
+        <label style="display:flex;gap:8px;align-items:center;font-size:14px;color:#374151;padding-bottom:10px;">
+          <input type="checkbox" name="enabled_only" value="1" checked style="width:auto;">仅启用中
+        </label>
+        <button type="submit">批量设置</button>
+      </div>
+    </form>
+  </div>
+
+  <div style="margin-top:14px;padding-top:14px;border-top:1px solid #e5e7eb;">
+    <div class="toolbar" style="margin:0;grid-template-columns:repeat(2,1fr);align-items:end;gap:14px;">
+      <form method="post" action="/targets/batch_force_rerun" class="toolbar" style="margin:0;grid-template-columns:1fr auto;align-items:end;">
+        <input type="hidden" name="selected_target_ids" value="" data-selected-target-ids>
+        <label style="display:flex;gap:8px;align-items:center;font-size:14px;color:#374151;">
+          <input type="checkbox" name="enabled_only" value="1" checked style="width:auto;">仅对启用中的 targets 批量强制重跑
+        </label>
+        <button type="submit" onclick="return confirm('确认批量强制重跑吗？下次调度会忽略历史发布时间基线，但仍保留 URL 去重。')">批量强制重跑</button>
+      </form>
+      <form method="post" action="/targets/batch_cancel_force_rerun" class="toolbar" style="margin:0;grid-template-columns:1fr auto;align-items:end;">
+        <input type="hidden" name="selected_target_ids" value="" data-selected-target-ids>
+        <label style="display:flex;gap:8px;align-items:center;font-size:14px;color:#374151;">
+          <input type="checkbox" name="enabled_only" value="1" checked style="width:auto;">仅取消启用中的待重跑标记
+        </label>
+        <button type="submit" onclick="return confirm('确认取消批量待强制重跑标记吗？这不会删除文章，只会清掉待重跑状态。')">取消批量待重跑</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:18px;">
+  <h3 style="margin-top:0;margin-bottom:8px;">批量修改抓取间隔</h3>
+  <p class="muted" style="margin-top:0;">批量更新 <code>check_interval_minutes</code>，方便统一调整同一批公众号的轮询频率。</p>
+  <form method="post" action="/targets/batch_update_interval" class="toolbar" style="margin-top:12px;grid-template-columns:2fr 1fr auto;align-items:end;">
+    <input type="hidden" name="selected_target_ids" value="" data-selected-target-ids>
+    <div class="field" style="margin:0;">
+      <label>抓取间隔（分钟）</label>
+      <input name="check_interval_minutes" type="number" min="1" value="180" required>
+    </div>
+    <label style="display:flex;gap:8px;align-items:center;font-size:14px;color:#374151;padding-bottom:10px;">
+      <input type="checkbox" name="enabled_only" value="1" checked style="width:auto;">仅修改启用中的 targets
+    </label>
+    <button type="submit" onclick="return confirm('确认批量修改抓取间隔吗？')">批量修改抓取间隔</button>
+  </form>
+</div>
+
+<div class="card" style="margin-bottom:18px;">
+  <h3 style="margin-top:0;margin-bottom:8px;">批量修改优先级</h3>
+  <p class="muted" style="margin-top:0;">批量更新 <code>priority</code>，方便统一提升或降低一批公众号的调度优先级。</p>
+  <form method="post" action="/targets/batch_update_priority" class="toolbar" style="margin-top:12px;grid-template-columns:2fr 1fr auto;align-items:end;">
+    <input type="hidden" name="selected_target_ids" value="" data-selected-target-ids>
+    <div class="field" style="margin:0;">
+      <label>优先级</label>
+      <input name="priority" type="number" min="0" value="10" required>
+    </div>
+    <label style="display:flex;gap:8px;align-items:center;font-size:14px;color:#374151;padding-bottom:10px;">
+      <input type="checkbox" name="enabled_only" value="1" checked style="width:auto;">仅修改启用中的 targets
+    </label>
+    <button type="submit" onclick="return confirm('确认批量修改优先级吗？')">批量修改优先级</button>
+  </form>
+</div>
+
+<div class="card" style="margin-bottom:18px;">
+  <h3 style="margin-top:0;margin-bottom:8px;">批量启用 / 停用</h3>
+  <p class="muted" style="margin-top:0;">统一切换全部 targets 的启用状态。这个操作会影响调度范围，请谨慎使用。</p>
+  <form method="post" action="/targets/batch_update_enabled" class="toolbar" style="margin-top:12px;grid-template-columns:2fr auto;align-items:end;">
+    <input type="hidden" name="selected_target_ids" value="" data-selected-target-ids>
+    <div class="field" style="margin:0;">
+      <label>目标状态</label>
+      <select name="enabled" required>
+        <option value="1">全部启用</option>
+        <option value="0">全部停用</option>
+      </select>
+    </div>
+    <button type="submit" onclick="return confirm('确认批量切换全部 targets 的启用状态吗？')">批量切换启用状态</button>
+  </form>
+</div>
+
+<details id="single-create" class="card" style="margin-bottom:18px;">
+  <summary style="cursor:pointer;font-weight:700;">单个新增</summary>
+  <form method="post" action="/targets/create" class="toolbar" style="margin-top:12px;grid-template-columns:repeat(2,1fr);">
+    <div class="field"><label>公众号名称</label><input name="account_name" required></div>
+    <div class="field"><label>搜索关键词</label><input name="keyword" required></div>
+    <div class="field"><label>抓取间隔（分钟）</label><input name="check_interval_minutes" type="number" value="180" required></div>
+    <div class="field"><label>优先级</label><input name="priority" type="number" value="10" required></div>
+    <div class="field"><label>启用</label><select name="enabled"><option value="1">是</option><option value="0">否</option></select></div>
+    <div style="display:flex;align-items:end;"><button type="submit">新增</button></div>
+  </form>
+</details>
+
+<details id="batch-create" class="card" style="margin-bottom:18px;">
+  <summary style="cursor:pointer;font-weight:700;">批量新增</summary>
+  <p class="muted">每行一个公众号名称。当前默认规则：公众号名称和搜索关键词相同，抓取间隔默认 180 分钟（3 小时）。</p>
+  <form method="post" action="/targets/batch_create" class="toolbar" style="margin-top:12px;grid-template-columns:repeat(2,1fr);">
+    <div class="field" style="grid-column: span 2;"><label>批量公众号列表</label><textarea name="batch_text" rows="10" placeholder="量子位&#10;新智元&#10;机器之心" required></textarea></div>
+    <div class="field"><label>抓取间隔（分钟）</label><input name="check_interval_minutes" type="number" value="180" required></div>
+    <div class="field"><label>优先级</label><input name="priority" type="number" value="10" required></div>
+    <div class="field"><label>启用</label><select name="enabled"><option value="1">是</option><option value="0">否</option></select></div>
+    <div style="display:flex;align-items:end;"><button type="submit">批量新增</button></div>
+  </form>
+</details>
+
+<div class="table-wrap">
+<table>
+  <tr>
+    <th style="width:48px;"><input id="targets-select-all" type="checkbox" onclick="targetsToggleSelectAll(this.checked)" style="width:auto;"></th>
+    <th>ID</th>
+    <th>名称</th>
+    <th>关键词</th>
+    <th>resolved_nickname</th>
+    <th>resolved_alias</th>
+    <th>resolved_fakeid</th>
+    <th>间隔</th>
+    <th>优先级</th>
+    <th>启用</th>
+    <th>最近下发</th>
+    <th>操作</th>
+  </tr>
+  {% for t in targets %}
+  <tr>
+    <td><input type="checkbox" name="target_row_select" value="{{ t.id }}" onchange="targetsRefreshSelectionUI()" style="width:auto;"></td>
+    <td>{{ t.id }}</td>
+    <td>{{ t.account_name }}</td>
+    <td>{{ t.keyword }}</td>
+    <td>{{ t.resolved_nickname or '' }}</td>
+    <td>{{ t.resolved_alias or '' }}</td>
+    <td style="word-break: break-all; max-width: 220px;">{{ t.resolved_fakeid or '' }}</td>
+    <td>{{ t.check_interval_minutes }}</td>
+    <td>{{ t.priority }}</td>
+    <td>{% if t.enabled == 1 %}<span class="badge good">启用</span>{% else %}<span class="badge warn">停用</span>{% endif %}</td>
+    <td>
+      <div>{{ t.last_dispatched_at or '' }}</div>
+      {% if t.force_full_sync_once == 1 %}
+        <div style="margin-top:6px;"><span class="badge warn">待强制重跑</span></div>
+      {% endif %}
+      {% if t.latest_task %}
+        <div style="margin-top:8px;padding-top:8px;border-top:1px dashed #e5e7eb;font-size:12px;line-height:1.5;color:#4b5563;">
+          <div>
+            最近任务:
+            {% if t.latest_task.status == 'done' %}
+              <span class="badge good">Done</span>
+            {% elif t.latest_task.status == 'failed' %}
+              <span class="badge bad">Failed</span>
+            {% else %}
+              <span class="badge warn">Pending</span>
+            {% endif %}
+          </div>
+          <div>创建于 {{ t.latest_task.created_at }}</div>
+          <div>回报于 {{ t.latest_task.reported_at or '未回报' }}</div>
+          <div>min_publish_time: {{ t.latest_task.min_publish_time | format_ts }}</div>
+          <div>实际入库: {{ t.latest_task.inserted_count }}</div>
+          {% if t.latest_task.limit_hit %}
+            <div style="margin-top:4px;"><span class="badge warn">触发 {{ t.latest_task.max_items_limit }} 条上限</span></div>
+          {% endif %}
+          {% if t.latest_task.error_summary %}
+            <div style="margin-top:4px;color:#b45309;">错误摘要: {{ t.latest_task.error_summary }}</div>
+          {% endif %}
+          <div style="margin-top:4px;"><a href="{{ t.task_url }}">查看任务记录</a></div>
+        </div>
+      {% endif %}
+    </td>
+    <td>
+      <form class="inline" method="post" action="/targets/force_rerun/{{ t.id }}" style="margin-bottom:8px;">
+        <button type="submit" onclick="return confirm('确认对这个 target 执行一次强制重跑吗？下次调度会忽略历史发布时间基线，但仍保留 URL 去重。')">强制重跑一次</button>
+      </form>
+      <details>
+        <summary>编辑</summary>
+        <form method="post" action="/targets/update/{{ t.id }}" class="stack" style="margin-top:10px;">
+          <input name="account_name" value="{{ t.account_name }}" required>
+          <input name="keyword" value="{{ t.keyword }}" required>
+          <input name="check_interval_minutes" type="number" value="{{ t.check_interval_minutes }}" required>
+          <input name="priority" type="number" value="{{ t.priority }}" required>
+          <select name="enabled">
+            <option value="1" {% if t.enabled == 1 %}selected{% endif %}>是</option>
+            <option value="0" {% if t.enabled == 0 %}selected{% endif %}>否</option>
+          </select>
+          <button type="submit">保存</button>
+        </form>
+      </details>
+      <form class="inline" method="post" action="/targets/delete/{{ t.id }}">
+        <button type="submit">删除</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+</div>
+{% if total == 0 %}
+<div class="card" style="margin-top:18px;">
+  <div class="muted">当前筛选条件下没有匹配的 targets，可以调整搜索词、启用状态或优先级区间。</div>
+</div>
+{% endif %}
+<div class="pager">
+  <form method="get" action="/targets" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0;">
+    <input type="hidden" name="page" value="1">
+    <input type="hidden" name="q" value="{{ filters.q }}">
+    <input type="hidden" name="enabled" value="{{ filters.enabled }}">
+    <input type="hidden" name="priority_min" value="{{ filters.priority_min }}">
+    <input type="hidden" name="priority_max" value="{{ filters.priority_max }}">
+    <label style="font-size:14px;color:#374151;">每页显示</label>
+    <select name="page_size" onchange="this.form.submit()" style="width:auto;min-width:88px;">
+      {% for size in page_size_options %}
+        <option value="{{ size }}" {% if page_size == size %}selected{% endif %}>{{ size }}</option>
+      {% endfor %}
+    </select>
+  </form>
+  <span>共 {{ total }} 条，第 {{ page }} / {{ total_pages }} 页</span>
+  {% if has_prev %}<a href="/targets?page={{ page - 1 }}{% if pager_query %}&{{ pager_query }}{% endif %}">上一页</a>{% endif %}
+  {% if has_next %}<a href="/targets?page={{ page + 1 }}{% if pager_query %}&{{ pager_query }}{% endif %}">下一页</a>{% endif %}
+</div>
+{% endblock %}

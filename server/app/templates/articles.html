@@ -1,0 +1,244 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-head">
+  <h1>Articles</h1>
+  <p>支持按公众号、标题、抓取状态和更人性化的发布时间筛选。</p>
+</div>
+<form method="get" action="/articles" class="search-form">
+  <div class="field">
+    <label>公众号</label>
+    <input name="account_name" value="{{ query.account_name or '' }}">
+  </div>
+  <div class="field">
+    <label>标题</label>
+    <input name="title" value="{{ query.title or '' }}">
+  </div>
+  <div class="field">
+    <label>方向</label>
+    <select name="direction">
+      <option value="">全部</option>
+      {% for item in direction_options %}
+      <option value="{{ item }}" {% if query.direction == item %}selected{% endif %}>{{ item }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label>系统判断</label>
+    <select name="system_hint">
+      <option value="" {% if not query.system_hint %}selected{% endif %}>全部</option>
+      <option value="follow" {% if query.system_hint == 'follow' %}selected{% endif %}>系统倾向关注</option>
+      <option value="ignore" {% if query.system_hint == 'ignore' %}selected{% endif %}>系统倾向忽略</option>
+      <option value="review" {% if query.system_hint == 'review' %}selected{% endif %}>值得补标</option>
+      <option value="weak" {% if query.system_hint == 'weak' %}selected{% endif %}>信号一般</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>发布时间起</label>
+    <input type="datetime-local" name="publish_time_from" value="{{ query.publish_time_from or '' }}">
+  </div>
+  <div class="field">
+    <label>发布时间止</label>
+    <input type="datetime-local" name="publish_time_to" value="{{ query.publish_time_to or '' }}">
+  </div>
+  <div class="field">
+    <label>抓取状态</label>
+    <select name="fetch_status">
+      <option value="">全部</option>
+      <option value="pending" {% if query.fetch_status == 'pending' %}selected{% endif %}>处理中</option>
+      <option value="done" {% if query.fetch_status == 'done' %}selected{% endif %}>已完成</option>
+      <option value="deleted" {% if query.fetch_status == 'deleted' %}selected{% endif %}>所有已删除/不可见</option>
+      <option value="deleted_author" {% if query.fetch_status == 'deleted_author' %}selected{% endif %}>作者已删除</option>
+      <option value="deleted_violation" {% if query.fetch_status == 'deleted_violation' %}selected{% endif %}>违规不可见</option>
+      <option value="deleted_complaint" {% if query.fetch_status == 'deleted_complaint' %}selected{% endif %}>投诉/侵权不可见</option>
+      <option value="deleted_unavailable" {% if query.fetch_status == 'deleted_unavailable' %}selected{% endif %}>内容不可查看</option>
+      <option value="failed" {% if query.fetch_status == 'failed' %}selected{% endif %}>失败</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>偏好状态</label>
+    <select name="pref_state">
+      <option value="" {% if not query.pref_state %}selected{% endif %}>全部</option>
+      <option value="follow" {% if query.pref_state == 'follow' %}selected{% endif %}>只看关注</option>
+      <option value="ignore" {% if query.pref_state == 'ignore' %}selected{% endif %}>只看忽略</option>
+      <option value="neutral" {% if query.pref_state == 'neutral' %}selected{% endif %}>只看中性</option>
+      <option value="unset" {% if query.pref_state == 'unset' %}selected{% endif %}>只看未设置</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>媒体筛选</label>
+    <select name="media_filter">
+      <option value="" {% if not query.media_filter %}selected{% endif %}>全部</option>
+      <option value="has_image" {% if query.media_filter == 'has_image' %}selected{% endif %}>只看有图片</option>
+      <option value="has_video" {% if query.media_filter == 'has_video' %}selected{% endif %}>只看有视频</option>
+      <option value="no_media" {% if query.media_filter == 'no_media' %}selected{% endif %}>只看无媒体</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>排序方式</label>
+    <select name="sort_by">
+      <option value="latest" {% if query.sort_by == 'latest' %}selected{% endif %}>最新优先</option>
+      <option value="images_desc" {% if query.sort_by == 'images_desc' %}selected{% endif %}>按图片数降序</option>
+      <option value="videos_desc" {% if query.sort_by == 'videos_desc' %}selected{% endif %}>按视频数降序</option>
+      <option value="media_desc" {% if query.sort_by == 'media_desc' %}selected{% endif %}>按媒体总数降序</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>最少图片数</label>
+    <input type="number" min="0" name="min_images" value="{{ query.min_images or '' }}" placeholder="如 3">
+  </div>
+  <div class="field">
+    <label>最少视频数</label>
+    <input type="number" min="0" name="min_videos" value="{{ query.min_videos or '' }}" placeholder="如 1">
+  </div>
+  <div class="field">
+    <label>每页显示数量</label>
+    <select name="page_size">
+      {% for size in [20, 50, 100, 200] %}
+      <option value="{{ size }}" {% if page_size == size %}selected{% endif %}>{{ size }} 条</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="full">
+    <button type="submit">搜索</button>
+    <a href="/articles">重置</a>
+  </div>
+</form>
+<div class="table-wrap">
+<table>
+  <tr>
+    <th>ID</th>
+    <th>公众号</th>
+    <th>标题</th>
+    <th>发布时间</th>
+    <th>发现时间</th>
+    <th>抓取状态</th>
+    <th>图片数</th>
+    <th>视频数</th>
+    <th>错误原因</th>
+    <th>用户偏好</th>
+    <th>操作</th>
+    <th>链接</th>
+    <th>查看MD</th>
+  </tr>
+  {% for a in articles %}
+  <tr data-article-row="{{ a.id }}">
+    <td>{{ a.id }}</td>
+    <td>{{ a.account_name or '' }}</td>
+    <td>
+      <a class="report-link-title source-link" href="{{ a.article_url }}" target="_blank">{{ a.title }}</a>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+        <span class="badge">{{ a.dashboard_direction }}</span>
+        <span class="badge {{ a.system_hint_badge }}">{{ a.system_hint_label }}</span>
+        <span class="badge">偏好信号 {{ a.pref_signal_score }}</span>
+        <span class="badge">AI规则 {{ a.ai_rule_score }}</span>
+        <span class="badge">内容信号 {{ a.value_signal_score }}</span>
+      </div>
+      {% if a.ai_rule_reasons %}
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+          {% for reason in a.ai_rule_reasons[:4] %}<span class="badge good">{{ reason }}</span>{% endfor %}
+        </div>
+      {% endif %}
+      {% if a.system_explain_reasons %}
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+          {% for reason in a.system_explain_reasons[:4] %}<span class="badge">{{ reason }}</span>{% endfor %}
+        </div>
+      {% endif %}
+    </td>
+    <td>{{ a.publish_time | format_ts }}</td>
+    <td>{{ a.discovered_at }}</td>
+    <td>
+      <span class="badge {{ a.fetch_meta.badge }}">{{ a.fetch_meta.label }}</span>
+    </td>
+    <td>
+      {% if a.image_count > 0 %}
+        <span class="badge good">{{ a.image_count }}</span>
+      {% else %}
+        <span class="muted">0</span>
+      {% endif %}
+    </td>
+    <td>
+      {% if a.video_count > 0 %}
+        <span class="badge warn">{{ a.video_count }}</span>
+      {% else %}
+        <span class="muted">0</span>
+      {% endif %}
+    </td>
+    <td style="max-width: 260px; word-break: break-word;">{{ a.fetch_error or '' }}</td>
+    <td data-pref-status-cell>
+      <span class="badge {{ a.pref_meta.badge }}" data-pref-badge>{{ a.pref_meta.label }}</span>
+      <div class="muted" data-pref-updated style="margin-top:6px;font-size:12px;{% if not a.user_pref_updated_at %}display:none;{% endif %}">{{ a.user_pref_updated_at or '' }}</div>
+    </td>
+    <td>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:88px;">
+        <button type="button" data-pref-btn data-state="follow" data-article-id="{{ a.id }}" {% if a.pref_meta.state == 'follow' %}style="background:linear-gradient(135deg,#059669,#10b981);"{% endif %}>关注</button>
+        <button type="button" data-pref-btn data-state="ignore" data-article-id="{{ a.id }}" {% if a.pref_meta.state == 'ignore' %}style="background:linear-gradient(135deg,#dc2626,#ef4444);"{% endif %}>忽略</button>
+        <button type="button" data-pref-btn data-state="neutral" data-article-id="{{ a.id }}" {% if a.pref_meta.state == 'neutral' %}style="background:linear-gradient(135deg,#2563eb,#60a5fa);"{% else %}style="background:linear-gradient(135deg,#2563eb,#60a5fa);opacity:.9;"{% endif %}>中性</button>
+        <button type="button" data-pref-btn data-state="unset" data-article-id="{{ a.id }}" {% if a.pref_meta.state == 'unset' %}style="background:linear-gradient(135deg,#6b7280,#9ca3af);"{% else %}style="background:linear-gradient(135deg,#6b7280,#9ca3af);opacity:.85;"{% endif %}>清空</button>
+      </div>
+    </td>
+    <td><a href="{{ a.article_url }}" target="_blank">打开</a></td>
+    <td><a href="/articles/{{ a.id }}/md" target="_blank">查看全文</a></td>
+  </tr>
+  {% endfor %}
+</table>
+</div>
+<div class="pager">
+  <span>共 {{ total }} 条，第 {{ page }} / {{ total_pages }} 页</span>
+  {% if has_prev %}<a href="/articles?page={{ page - 1 }}&page_size={{ page_size }}&account_name={{ query.account_name }}&title={{ query.title }}&direction={{ query.direction }}&system_hint={{ query.system_hint }}&publish_time_from={{ query.publish_time_from }}&publish_time_to={{ query.publish_time_to }}&fetch_status={{ query.fetch_status }}&pref_state={{ query.pref_state }}&media_filter={{ query.media_filter }}&sort_by={{ query.sort_by }}&min_images={{ query.min_images }}&min_videos={{ query.min_videos }}">上一页</a>{% endif %}
+  {% if has_next %}<a href="/articles?page={{ page + 1 }}&page_size={{ page_size }}&account_name={{ query.account_name }}&title={{ query.title }}&direction={{ query.direction }}&system_hint={{ query.system_hint }}&publish_time_from={{ query.publish_time_from }}&publish_time_to={{ query.publish_time_to }}&fetch_status={{ query.fetch_status }}&pref_state={{ query.pref_state }}&media_filter={{ query.media_filter }}&sort_by={{ query.sort_by }}&min_images={{ query.min_images }}&min_videos={{ query.min_videos }}">下一页</a>{% endif %}
+</div>
+<script>
+  (function(){
+    const buttons = Array.from(document.querySelectorAll('[data-pref-btn]'));
+    if (!buttons.length) return;
+    const colorMap = {
+      follow: 'linear-gradient(135deg,#059669,#10b981)',
+      ignore: 'linear-gradient(135deg,#dc2626,#ef4444)',
+      neutral: 'linear-gradient(135deg,#2563eb,#60a5fa)',
+      unset: 'linear-gradient(135deg,#6b7280,#9ca3af)'
+    };
+    const badgeClassMap = { follow: 'good', ignore: 'bad', neutral: '', unset: 'warn' };
+    const labelMap = { follow: '关注', ignore: '忽略', neutral: '中性', unset: '未设置' };
+    async function updatePref(articleId, state, btn){
+      const row = btn.closest('[data-article-row]');
+      if (!row) return;
+      const form = new FormData();
+      form.append('state', state);
+      btn.disabled = true;
+      try {
+        const resp = await fetch(`/articles/${articleId}/preference-json`, {
+          method: 'POST',
+          body: form,
+          credentials: 'same-origin'
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        const article = data.article || {};
+        const badge = row.querySelector('[data-pref-badge]');
+        const updated = row.querySelector('[data-pref-updated]');
+        const buttonsInRow = row.querySelectorAll('[data-pref-btn]');
+        if (badge) {
+          badge.classList.remove('good', 'bad', 'warn');
+          if (badgeClassMap[article.pref_meta.state]) badge.classList.add(badgeClassMap[article.pref_meta.state]);
+          badge.textContent = labelMap[article.pref_meta.state] || article.pref_meta.label || '未设置';
+        }
+        if (updated) {
+          updated.textContent = article.user_pref_updated_at || '';
+          updated.style.display = article.user_pref_updated_at ? '' : 'none';
+        }
+        buttonsInRow.forEach(b => {
+          b.style.background = colorMap[b.dataset.state] || colorMap.unset;
+          b.style.opacity = b.dataset.state === article.pref_meta.state ? '1' : (b.dataset.state === 'unset' ? '.85' : '1');
+        });
+      } catch (err) {
+        alert('更新偏好失败：' + err.message);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+    buttons.forEach(btn => {
+      btn.addEventListener('click', () => updatePref(btn.dataset.articleId, btn.dataset.state, btn));
+    });
+  })();
+</script>
+{% endblock %}

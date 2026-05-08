@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WeChat Ingest Admin</title>
+  <style>
+    :root {
+      --bg: linear-gradient(180deg, #f7faff 0%, #f5f7fb 100%);
+      --card: rgba(255,255,255,.9);
+      --card-strong: #ffffff;
+      --text: #111827;
+      --muted: #6b7280;
+      --line: #e5e7eb;
+      --brand: #2563eb;
+      --brand-2: #7c3aed;
+      --brand-soft: #eef4ff;
+      --good: #059669;
+      --good-soft: #ecfdf5;
+      --warn: #d97706;
+      --warn-soft: #fff7ed;
+      --bad: #dc2626;
+      --bad-soft: #fef2f2;
+      --shadow: 0 10px 30px rgba(17,24,39,.06);
+      --radius: 18px;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--text);
+      background: var(--bg);
+      font-family: Inter, Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    a { color: var(--brand); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .shell { max-width: 1320px; margin: 0 auto; padding: 28px; }
+    .topbar {
+      display: flex; justify-content: space-between; align-items: center; gap: 16px;
+      padding: 18px 22px; margin-bottom: 20px; border-radius: 22px;
+      background: linear-gradient(135deg, rgba(37,99,235,.08), rgba(124,58,237,.08));
+      border: 1px solid rgba(37,99,235,.12);
+      box-shadow: var(--shadow);
+    }
+    .brand-title { font-size: 22px; font-weight: 800; margin: 0; }
+    .brand-subtitle { margin-top: 6px; color: var(--muted); font-size: 14px; }
+    nav { display: flex; gap: 10px; flex-wrap: wrap; }
+    nav a {
+      text-decoration: none; color: var(--text); padding: 9px 14px; border-radius: 999px;
+      background: rgba(255,255,255,.84); border: 1px solid var(--line); font-weight: 600;
+      transition: .2s ease;
+    }
+    nav a:hover { background: var(--brand-soft); color: var(--brand); transform: translateY(-1px); text-decoration: none; }
+    .page-head { margin-bottom: 18px; }
+    .page-head h1, .page-head h2 { margin: 0 0 8px 0; }
+    .page-head p { margin: 0; color: var(--muted); }
+    .grid { display: grid; gap: 16px; margin: 18px 0; }
+    .grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+    .grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+    .grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
+    .card {
+      border: 1px solid rgba(229,231,235,.9);
+      padding: 18px; border-radius: var(--radius); background: var(--card);
+      box-shadow: var(--shadow); backdrop-filter: blur(10px);
+    }
+    .card h3 { margin-top: 0; }
+    .card-title { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+    .metric { font-size: 30px; font-weight: 800; margin-top: 8px; }
+    .muted { color: var(--muted); }
+    .badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700;
+      background: var(--brand-soft); color: var(--brand);
+    }
+    .badge.good { background: var(--good-soft); color: var(--good); }
+    .badge.warn { background: var(--warn-soft); color: var(--warn); }
+    .badge.bad { background: var(--bad-soft); color: var(--bad); }
+    .stack { display: flex; flex-direction: column; gap: 10px; }
+    .toolbar, .search-form {
+      display: grid; gap: 12px; margin: 12px 0 18px 0;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+    .search-form.compact { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .field label { display:block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+    input, select, textarea {
+      padding: 10px 12px; width: 100%; border: 1px solid var(--line); border-radius: 12px;
+      background: #fff; color: var(--text); font: inherit;
+    }
+    textarea { min-height: 180px; }
+    button {
+      padding: 10px 14px; border: 0; border-radius: 12px; background: linear-gradient(135deg, var(--brand), var(--brand-2));
+      color: #fff; cursor: pointer; font-weight: 700; box-shadow: 0 8px 18px rgba(37,99,235,.18);
+    }
+    button:hover { transform: translateY(-1px); }
+    .table-wrap {
+      background: var(--card-strong); border: 1px solid var(--line); border-radius: var(--radius);
+      overflow: hidden; box-shadow: var(--shadow);
+    }
+    table { border-collapse: collapse; width: 100%; background: #fff; }
+    th, td { border-bottom: 1px solid var(--line); padding: 12px; font-size: 14px; vertical-align: top; }
+    th { background: #f8fafc; text-align: left; color: #374151; }
+    tr:hover td { background: #fbfdff; }
+    .pager { margin-top: 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .pager a { padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+    .report-wrap {
+      background: var(--card-strong); border: 1px solid var(--line); border-radius: 24px; padding: 26px; box-shadow: var(--shadow);
+    }
+    .report-layout { grid-template-columns: 320px minmax(0, 1fr); align-items: start; }
+    .report-aside, .report-main { min-width: 0; }
+    .report-meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+    .report-body { line-height: 1.85; font-size: 15px; }
+    .report-body h2 {
+      margin-top: 28px; margin-bottom: 14px; padding: 10px 14px; border-radius: 14px;
+      background: linear-gradient(135deg, rgba(37,99,235,.08), rgba(124,58,237,.08));
+      border-left: 4px solid var(--brand);
+    }
+    .report-body h3 { margin-top: 22px; margin-bottom: 10px; color: #111827; }
+    .report-body p { margin: 10px 0; }
+    .report-list { padding-left: 20px; }
+    .report-list li { margin: 10px 0; }
+    .report-link-card { padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: #f9fafb; }
+    .report-link-title { font-size: 16px; font-weight: 800; color: #111827; text-decoration: none; }
+    .report-link-title:hover { color: var(--brand); }
+    .source-link { color: var(--brand); word-break: break-all; text-decoration: underline; }
+    .raw-link { font-size: 12px; color: #4b5563; }
+    .hero { margin-bottom: 20px; }
+    .alert-list { display:flex; flex-direction:column; gap:10px; }
+    .alert-item { padding: 12px 14px; border-radius: 14px; background: var(--warn-soft); border: 1px solid #fed7aa; color: #9a3412; }
+    .progress { height: 10px; border-radius: 999px; background: #eef2f7; overflow: hidden; }
+    .progress > span { display:block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--brand), var(--brand-2)); }
+    .sparkline { display:flex; gap:8px; align-items:flex-end; height:120px; margin-top:10px; }
+    .sparkbar { flex:1; min-width: 18px; background: linear-gradient(180deg, rgba(37,99,235,.9), rgba(124,58,237,.75)); border-radius: 10px 10px 4px 4px; position: relative; }
+    .sparkbar small { position:absolute; bottom:-22px; left:50%; transform:translateX(-50%); font-size:11px; color: var(--muted); white-space: nowrap; }
+    .quick-actions { display:flex; gap:10px; flex-wrap:wrap; }
+    .quick-actions a { padding:10px 14px; border-radius:12px; background:#fff; border:1px solid var(--line); font-weight:700; }
+    .hero-panel { padding:18px; border-radius:20px; background: linear-gradient(135deg, rgba(37,99,235,.08), rgba(124,58,237,.08)); border:1px solid rgba(37,99,235,.12); margin-bottom:18px; }
+    .login-shell { display:flex; justify-content:center; padding: 40px 0 12px; }
+    .login-card { width: min(460px, 100%); }
+    .toc a.active { color: var(--brand-2); font-weight: 800; }
+    .signal-badge { position: relative; text-decoration: none; cursor: pointer; }
+    .oc-tooltip {
+      position: fixed; min-width: 280px; max-width: 380px; border-radius: 16px;
+      background: rgba(255,255,255,.96); color: var(--text); font-size: 12px; line-height: 1.6; z-index: 9999;
+      box-shadow: 0 18px 44px rgba(15,23,42,.18); display: none; pointer-events: auto;
+      border: 1px solid rgba(148,163,184,.22); overflow: hidden; backdrop-filter: blur(12px);
+    }
+    .oc-tooltip.tooltip-right::before,
+    .oc-tooltip.tooltip-left::before {
+      content: ""; position: absolute; top: 18px; width: 12px; height: 12px;
+      background: rgba(255,255,255,.96); border-top: 1px solid rgba(148,163,184,.22); border-left: 1px solid rgba(148,163,184,.22);
+      transform: rotate(45deg);
+    }
+    .oc-tooltip.tooltip-right::before { left: -7px; }
+    .oc-tooltip.tooltip-left::before { right: -7px; transform: rotate(225deg); }
+    .oc-tooltip-shell { padding: 12px; }
+    .oc-tooltip-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom: 10px; }
+    .oc-tooltip-title { font-size: 14px; font-weight: 800; color: #0f172a; }
+    .oc-tooltip-subtitle { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .oc-tooltip-pill {
+      flex: 0 0 auto; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 800;
+      background: var(--brand-soft); color: var(--brand);
+    }
+    .oc-tooltip.warn .oc-tooltip-pill { background: var(--warn-soft); color: var(--warn); }
+    .oc-tooltip.good .oc-tooltip-pill { background: var(--good-soft); color: var(--good); }
+    .oc-tooltip-list { display:flex; flex-direction:column; gap:8px; max-height: min(56vh, 420px); overflow:auto; padding-right: 2px; }
+    .oc-tooltip-item {
+      display:block; padding: 10px 12px; border-radius: 12px; background: #f8fafc;
+      border: 1px solid rgba(226,232,240,.95); color: inherit; text-decoration: none;
+      transition: .18s ease;
+    }
+     .oc-tooltip-more {
+      border: 1px dashed rgba(148,163,184,.45); border-radius: 12px; background: rgba(248,250,252,.95);
+      padding: 8px 10px;
+    }
+    .oc-tooltip-more summary {
+      cursor: pointer; font-size: 12px; font-weight: 800; color: var(--brand); list-style: none;
+    }
+    .oc-tooltip-more summary::-webkit-details-marker { display: none; }
+    .oc-tooltip-more-list { display:flex; flex-direction:column; gap:8px; margin-top: 8px; }
+    .oc-tooltip-note { font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .oc-tooltip-item:hover {
+      transform: translateY(-1px); text-decoration: none; background: #eff6ff;
+      border-color: rgba(96,165,250,.45); box-shadow: 0 8px 18px rgba(37,99,235,.10);
+    }
+    .oc-tooltip-source { font-size: 11px; font-weight: 800; letter-spacing: .02em; color: var(--brand); margin-bottom: 4px; }
+    .oc-tooltip-title-text { font-size: 13px; font-weight: 700; color: #0f172a; line-height: 1.45; }
+    .oc-tooltip-empty { padding: 10px 12px; border-radius: 12px; background: #f8fafc; color: var(--muted); border: 1px dashed rgba(203,213,225,.95); }
+    @media (max-width: 1100px) {
+      .grid.cols-4, .grid.cols-3, .grid.cols-2, .search-form, .toolbar { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 900px) {
+      .report-layout { grid-template-columns: 1fr !important; }
+      .report-main { order: 1; }
+      .report-aside { order: 2; }
+      .report-wrap { padding: 20px 18px; border-radius: 18px; }
+      .report-body { font-size: 14px; line-height: 1.76; }
+      .report-body h2 { margin-top: 20px; padding: 8px 12px; }
+      .report-body h3 { margin-top: 18px; }
+    }
+    @media (max-width: 720px) {
+      .shell { padding: 16px; }
+      .topbar { flex-direction: column; align-items: flex-start; }
+      .grid.cols-4, .grid.cols-3, .grid.cols-2, .search-form, .toolbar { grid-template-columns: 1fr; }
+      .login-shell { padding-top: 18px; }
+      .report-wrap { padding: 18px 14px; border-radius: 16px; }
+      .report-meta { gap: 8px; }
+      .oc-tooltip { min-width: 240px; max-width: min(92vw, 340px); }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="topbar">
+      <div>
+        <div class="brand-title">WeChat Ingest Console</div>
+        <div class="brand-subtitle">抓取、任务、文章、日报统一查看面板</div>
+      </div>
+      <nav>
+        <a href="/">仪表盘</a>
+        <a href="/reports">日报</a>
+        <a href="/settings">设置</a>
+        <a href="/article-preferences">偏好画像</a>
+        <a href="/targets">Targets</a>
+        <a href="/workers">Workers</a>
+        <a href="/tasks">Tasks</a>
+        <a href="/articles">Articles</a>
+      </nav>
+    </div>
+    {% block content %}{% endblock %}
+  </div>
+  <div id="oc-tooltip" class="oc-tooltip"></div>
+  <script>
+    (function(){
+      const tooltip = document.getElementById('oc-tooltip');
+      if (!tooltip) return;
+      let activeBadge = null;
+      let hideTimer = null;
+      function placeTip(el){
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        const gap = 12;
+        const tipWidth = tooltip.offsetWidth || 340;
+        const tipHeight = tooltip.offsetHeight || 160;
+        let left = rect.right + gap;
+        let top = rect.top - 8;
+        tooltip.classList.remove('tooltip-left', 'tooltip-right');
+        if (left + tipWidth > window.innerWidth - 12) {
+          left = Math.max(12, rect.left - tipWidth - gap);
+          tooltip.classList.add('tooltip-left');
+        } else {
+          tooltip.classList.add('tooltip-right');
+        }
+        if (top + tipHeight > window.innerHeight - 12) top = Math.max(12, window.innerHeight - tipHeight - 12);
+        if (top < 12) top = 12;
+        tooltip.style.left = left + 'px';
+        tooltip.style.top = top + 'px';
+      }
+      function decodeHTML(s){ const t = document.createElement('textarea'); t.innerHTML = s; return t.value; }
+      function escapeHTML(s){ return (s || '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
+      function renderTip(html, el){
+        const wrap = document.createElement('div');
+        wrap.innerHTML = decodeHTML(html || '');
+        const links = Array.from(wrap.querySelectorAll('a'));
+        const label = el.getAttribute('data-label') || '来源';
+        const tone = el.classList.contains('good') ? 'good' : (el.classList.contains('warn') ? 'warn' : '');
+        let items = links.map(link => {
+          const text = (link.textContent || '').trim();
+          const idx = text.indexOf('：');
+          const source = idx >= 0 ? text.slice(0, idx) : '来源';
+          const title = idx >= 0 ? text.slice(idx + 1) : text;
+          return `<a class="oc-tooltip-item" href="${link.href}" target="_blank" rel="noopener"><div class="oc-tooltip-source">${escapeHTML(source)}</div><div class="oc-tooltip-title-text">${escapeHTML(title)}</div></a>`;
+        });
+        if (!items.length) {
+          const rows = Array.from(wrap.children).map(node => (node.textContent || '').trim()).filter(Boolean);
+          items = rows.map(text => {
+            const idx = text.indexOf('：');
+            const source = idx >= 0 ? text.slice(0, idx) : text;
+            const title = idx >= 0 ? text.slice(idx + 1) : '已标注来源';
+            return `<div class="oc-tooltip-item"><div class="oc-tooltip-source">${escapeHTML(source)}</div><div class="oc-tooltip-title-text">${escapeHTML(title)}</div></div>`;
+          });
+        }
+        let subtitle = '点击标题可直达原始文章';
+        let listHtml = items.length ? items.join('') : '<div class="oc-tooltip-empty">暂无可匹配来源</div>';
+        if (items.length > 3) {
+          const lead = items.slice(0, 3).join('');
+          const extra = items.slice(3);
+          listHtml = `${lead}<details class="oc-tooltip-more"><summary>展开其余 ${extra.length} 条来源</summary><div class="oc-tooltip-more-list">${extra.join('')}</div></details>`;
+          subtitle = '优先展示最相关 3 条，可展开查看其余来源';
+        }
+        tooltip.classList.remove('good', 'warn');
+        if (tone) tooltip.classList.add(tone);
+        tooltip.innerHTML = `
+          <div class="oc-tooltip-shell">
+            <div class="oc-tooltip-head">
+              <div>
+                <div class="oc-tooltip-title">${escapeHTML(label)}</div>
+                <div class="oc-tooltip-subtitle">${escapeHTML(subtitle)}</div>
+                ${items.length > 3 ? `<div class="oc-tooltip-note">共 ${items.length} 条来源，避免一次性铺满阅读区</div>` : ''}
+              </div>
+              <div class="oc-tooltip-pill">${escapeHTML(el.textContent.trim())}</div>
+            </div>
+            <div class="oc-tooltip-list">${listHtml}</div>
+          </div>`;
+      }
+      function clearHide(){ if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; } }
+      function showTip(el){
+        const html = el.getAttribute('data-tooltip-html');
+        if(!html) return;
+        clearHide();
+        activeBadge = el;
+        renderTip(html, el);
+        tooltip.style.display = 'block';
+        placeTip(el);
+      }
+      function hideTip(){ tooltip.style.display = 'none'; tooltip.innerHTML = ''; tooltip.classList.remove('good', 'warn', 'tooltip-left', 'tooltip-right'); activeBadge = null; clearHide(); }
+      function hideSoon(){
+        clearHide();
+        hideTimer = setTimeout(()=>{
+          if (tooltip.matches(':hover')) return;
+          if (activeBadge && activeBadge.matches(':hover')) return;
+          hideTip();
+        }, 140);
+      }
+      document.addEventListener('mouseover', (e)=>{
+        const el = e.target.closest('.signal-badge');
+        if (el) showTip(el);
+      });
+      document.addEventListener('mouseout', (e)=>{
+        const el = e.target.closest('.signal-badge');
+        if (el) hideSoon();
+      });
+      tooltip.addEventListener('mouseenter', clearHide);
+      tooltip.addEventListener('mouseleave', hideSoon);
+      window.addEventListener('scroll', ()=>{ if (activeBadge) placeTip(activeBadge); }, true);
+      window.addEventListener('resize', ()=>{ if (activeBadge) placeTip(activeBadge); });
+      const tocLinks = Array.from(document.querySelectorAll('.toc a[href^="#sec-"]'));
+      if (tocLinks.length) {
+        const sections = tocLinks.map(a => document.querySelector(a.getAttribute('href'))).filter(Boolean);
+        const io = new IntersectionObserver((entries)=>{
+          entries.forEach(entry=>{
+            const id = '#' + entry.target.id;
+            const link = tocLinks.find(a => a.getAttribute('href') === id);
+            if (link && entry.isIntersecting) {
+              tocLinks.forEach(x => x.classList.remove('active'));
+              link.classList.add('active');
+            }
+          });
+        }, { rootMargin: '-20% 0px -70% 0px', threshold: 0.01 });
+        sections.forEach(sec => io.observe(sec));
+      }
+    })();
+  </script>
+</body>
+</html>

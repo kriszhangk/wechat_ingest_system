@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="login-shell">
+  <div class="card login-card">
+    <div class="page-head" style="margin-bottom:14px;">
+      <h1>管理员登录</h1>
+      <p>除日报详情页外，其他管理页面需要管理员密码后才能查看。</p>
+    </div>
+
+    {% if error %}
+      <div class="alert-item" style="margin-bottom:14px;">{{ error }}</div>
+    {% endif %}
+
+    {% if not configured %}
+      <div class="report-link-card">
+        <div style="font-weight:800;margin-bottom:6px;">尚未启用密码保护</div>
+        <div class="muted">请先为 server 进程配置环境变量 <code>WECHAT_ADMIN_PASSWORD</code>，然后重启服务。</div>
+      </div>
+    {% else %}
+      <form method="post" action="/admin/login" class="stack" style="margin-top:8px;">
+        <input type="hidden" name="next_url" value="{{ next_url }}">
+        <div class="field">
+          <label>管理员密码</label>
+          <input type="password" name="password" placeholder="请输入管理员密码" required autofocus>
+        </div>
+        <button type="submit">进入管理页面</button>
+      </form>
+    {% endif %}
+
+    <div class="muted" style="margin-top:14px;">公开访问：日报详情页 `/reports/{id}` 仍可直接查看，适合群内传播与手机阅读。</div>
+  </div>
+</div>
+{% endblock %}

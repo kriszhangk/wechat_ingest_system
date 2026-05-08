@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-head">
+  <h1>Workers</h1>
+  <p>查看 Worker 在线情况、状态与版本信息。</p>
+</div>
+<div class="table-wrap">
+<table>
+  <tr>
+    <th>ID</th>
+    <th>Worker ID</th>
+    <th>Last Seen</th>
+    <th>Status</th>
+    <th>Version</th>
+  </tr>
+  {% for w in workers %}
+  <tr>
+    <td>{{ w.id }}</td>
+    <td>{{ w.worker_id }}</td>
+    <td>{{ w.last_seen_at or '' }}</td>
+    <td>
+      {% if w.status == 'active' %}
+        <span class="badge good">active</span>
+      {% elif w.status %}
+        <span class="badge warn">{{ w.status }}</span>
+      {% else %}
+        <span class="muted">-</span>
+      {% endif %}
+    </td>
+    <td>{{ w.version or '' }}</td>
+  </tr>
+  {% endfor %}
+</table>
+</div>
+<div class="pager">
+  <span>共 {{ total }} 条，第 {{ page }} / {{ total_pages }} 页</span>
+  {% if has_prev %}<a href="/workers?page={{ page - 1 }}">上一页</a>{% endif %}
+  {% if has_next %}<a href="/workers?page={{ page + 1 }}">下一页</a>{% endif %}
+</div>
+{% endblock %}

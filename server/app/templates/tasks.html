@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-head">
+  <h1>Tasks</h1>
+  <p>查看任务下发、回报、失败原因与最小发布时间窗口。</p>
+</div>
+<form method="get" action="/tasks" class="search-form compact">
+  <div class="field">
+    <label>状态</label>
+    <select name="status">
+      <option value="">全部</option>
+      <option value="pending" {% if query.status == 'pending' %}selected{% endif %}>Pending</option>
+      <option value="done" {% if query.status == 'done' %}selected{% endif %}>Done</option>
+      <option value="failed" {% if query.status == 'failed' %}selected{% endif %}>Failed</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>公众号</label>
+    <input name="account_name" value="{{ query.account_name or '' }}">
+  </div>
+  <div class="field">
+    <label>Worker</label>
+    <input name="worker_id" value="{{ query.worker_id or '' }}">
+  </div>
+  <div style="display:flex;align-items:end;gap:10px;">
+    <button type="submit">搜索</button>
+    <a href="/tasks">重置</a>
+  </div>
+</form>
+<div class="table-wrap">
+<table>
+  <tr>
+    <th>ID</th>
+    <th>Task ID</th>
+    <th>公众号</th>
+    <th>Worker</th>
+    <th>Status</th>
+    <th>最小发布时间</th>
+    <th>创建时间</th>
+    <th>回报时间</th>
+    <th>统计</th>
+    <th>错误</th>
+  </tr>
+  {% for t in tasks %}
+  <tr>
+    <td>{{ t.id }}</td>
+    <td style="max-width:220px;word-break:break-all;">{{ t.task_id }}</td>
+    <td>{{ t.account_name or '' }}</td>
+    <td>{{ t.assigned_worker_id or '' }}</td>
+    <td>
+      {% if t.status == 'done' %}
+        <span class="badge good">Done</span>
+      {% elif t.status == 'failed' %}
+        <span class="badge bad">Failed</span>
+      {% else %}
+        <span class="badge warn">Pending</span>
+      {% endif %}
+    </td>
+    <td>{{ t.min_publish_time | format_ts }}</td>
+    <td>{{ t.created_at }}</td>
+    <td>{{ t.reported_at or '' }}</td>
+    <td style="max-width:320px; word-break: break-word; font-size:13px; line-height:1.45;">
+      {% if t.task_stats_lines %}
+        {% for line in t.task_stats_lines %}
+          <div>{{ line }}</div>
+        {% endfor %}
+      {% else %}
+        <span style="color:#888;">-</span>
+      {% endif %}
+    </td>
+    <td style="max-width:260px; word-break: break-word;">{{ t.error_message or '' }}</td>
+  </tr>
+  {% endfor %}
+</table>
+</div>
+<div class="pager">
+  <span>共 {{ total }} 条，第 {{ page }} / {{ total_pages }} 页</span>
+  {% if has_prev %}<a href="/tasks?page={{ page - 1 }}&status={{ query.status }}&account_name={{ query.account_name }}&worker_id={{ query.worker_id }}">上一页</a>{% endif %}
+  {% if has_next %}<a href="/tasks?page={{ page + 1 }}&status={{ query.status }}&account_name={{ query.account_name }}&worker_id={{ query.worker_id }}">下一页</a>{% endif %}
+</div>
+{% endblock %}

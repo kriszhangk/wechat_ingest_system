@@ -1,0 +1,219 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-head">
+  <h1>{{ article.title }}</h1>
+  <p>查看文章正文 Markdown、抓取状态与原始链接。</p>
+</div>
+<div class="grid cols-2" style="grid-template-columns: 320px 1fr; align-items:start;">
+  <div class="card stack">
+    <div>
+      <div class="muted">公众号</div>
+      <div>{{ article.account_name or '' }}</div>
+    </div>
+    <div>
+      <div class="muted">发布时间</div>
+      <div>{{ article.publish_time | format_ts }}</div>
+    </div>
+    <div>
+      <div class="muted">发现时间</div>
+      <div>{{ article.discovered_at or '' }}</div>
+    </div>
+    <div>
+      <div class="muted">抓取状态</div>
+      <div>
+        <span class="badge {{ article.fetch_meta.badge }}">{{ article.fetch_meta.label }}</span>
+      </div>
+    </div>
+    {% if article.fetch_error %}
+    <div>
+      <div class="muted">失败原因</div>
+      <div>{{ article.fetch_error }}</div>
+    </div>
+    {% endif %}
+    <div>
+      <div class="muted">原文链接</div>
+      <a class="source-link" href="{{ article.article_url }}" target="_blank">{{ article.article_url }}</a>
+    </div>
+    <div>
+      <div class="muted">结构化图片</div>
+      <div>{{ article.image_urls | length }} 条</div>
+    </div>
+    <div>
+      <div class="muted">结构化视频</div>
+      <div>{{ article.video_urls | length }} 条</div>
+    </div>
+  </div>
+  <div class="report-wrap">
+    <h2>选图建议</h2>
+    <div class="grid cols-3" style="grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; margin-bottom:18px;">
+      <div class="card">
+        <div class="muted">推荐进日报网页</div>
+        <div class="metric" style="font-size:26px;">{{ article.image_selection.summary.web_count }}</div>
+        <div class="muted">少图、强图、代表性优先</div>
+      </div>
+      <div class="card">
+        <div class="muted">推荐进公众号文章</div>
+        <div class="metric" style="font-size:26px;">{{ article.image_selection.summary.wechat_count }}</div>
+        <div class="muted">信息图 / 关键现场图优先</div>
+      </div>
+      <div class="card">
+        <div class="muted">建议过滤</div>
+        <div class="metric" style="font-size:26px;">{{ article.image_selection.summary.drop_count }}</div>
+        <div class="muted">小图、GIF、卡片/关注/海报优先过滤</div>
+      </div>
+    </div>
+
+    <div class="grid cols-2" style="grid-template-columns:1fr 1fr; gap:16px; margin-bottom:18px;">
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:10px;">
+          <div class="muted">推荐进日报网页</div>
+          <span class="badge good">{{ article.image_selection.summary.web_count }}</span>
+        </div>
+        {% if article.image_selection.keep_for_web %}
+          <div class="grid cols-2" style="grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; margin:0;">
+            {% for item in article.image_selection.keep_for_web %}
+              <a href="{{ item.proxy_url or item.url }}" target="_blank" class="report-link-card" style="padding:10px; text-decoration:none; color:inherit;">
+                <img src="{{ item.proxy_url or item.url }}" alt="{{ item.alt_norm or '图片' }}" style="display:block; width:100%; aspect-ratio: 4 / 3; object-fit:cover; border-radius:12px; background:#f8fafc; border:1px solid #e5e7eb; margin-bottom:8px;">
+                <div style="font-size:12px; color:#111827; line-height:1.5;">{{ item.kind }} · score {{ item.score }}</div>
+                <div class="muted" style="font-size:11px; margin-top:4px;">{{ (item.keep_reasons[:2] | join(' / ')) or '高信息密度' }}</div>
+              </a>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="muted">暂无推荐图</div>
+        {% endif %}
+      </div>
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:10px;">
+          <div class="muted">推荐进公众号文章</div>
+          <span class="badge warn">{{ article.image_selection.summary.wechat_count }}</span>
+        </div>
+        {% if article.image_selection.keep_for_wechat %}
+          <div class="grid cols-2" style="grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; margin:0;">
+            {% for item in article.image_selection.keep_for_wechat %}
+              <a href="{{ item.proxy_url or item.url }}" target="_blank" class="report-link-card" style="padding:10px; text-decoration:none; color:inherit;">
+                <img src="{{ item.proxy_url or item.url }}" alt="{{ item.alt_norm or '图片' }}" style="display:block; width:100%; aspect-ratio: 4 / 3; object-fit:cover; border-radius:12px; background:#f8fafc; border:1px solid #e5e7eb; margin-bottom:8px;">
+                <div style="font-size:12px; color:#111827; line-height:1.5;">{{ item.kind }} · score {{ item.score }}</div>
+                <div class="muted" style="font-size:11px; margin-top:4px;">{{ (item.keep_reasons[:2] | join(' / ')) or '适合正文使用' }}</div>
+              </a>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="muted">暂无推荐图</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <details class="card" style="margin-bottom:18px;">
+      <summary style="cursor:pointer; font-weight:700;">查看被过滤图片与原因</summary>
+      {% if article.image_selection.drop %}
+        <div class="stack" style="gap:12px; margin-top:14px;">
+          {% for item in article.image_selection.drop[:12] %}
+            <div class="report-link-card" style="display:grid; grid-template-columns:120px 1fr; gap:12px; align-items:start;">
+              <div>
+                <img src="{{ item.proxy_url or item.url }}" alt="{{ item.alt_norm or '图片' }}" style="display:block; width:100%; aspect-ratio:4 / 3; object-fit:cover; border-radius:12px; background:#f8fafc; border:1px solid #e5e7eb;">
+              </div>
+              <div>
+                <div style="font-weight:700; color:#111827; margin-bottom:4px;">score {{ item.score }} · {{ item.kind }}</div>
+                <div class="muted" style="font-size:12px; line-height:1.6;">{{ item.drop_reasons | join('；') or '综合分不足' }}</div>
+                <div class="muted" style="font-size:11px; margin-top:6px;">{{ item.url }}</div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="muted" style="margin-top:14px;">暂无被过滤图片</div>
+      {% endif %}
+    </details>
+
+    <h2>媒体预览</h2>
+    <div class="grid cols-2" style="grid-template-columns:1.2fr .8fr; gap:16px; margin-bottom:18px;">
+      <div class="card">
+        <div class="muted" style="margin-bottom:10px;">图片预览</div>
+        {% if article.image_urls %}
+          <div class="grid cols-3" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:12px; margin:0;">
+            {% for item in article.image_urls %}
+              <a href="{{ item.proxy_url or item.url }}" target="_blank" class="report-link-card" style="padding:10px; text-decoration:none; color:inherit;">
+                <img src="{{ item.proxy_url or item.url }}" alt="{{ item.alt or '图片' }}" style="display:block; width:100%; aspect-ratio: 4 / 3; object-fit:cover; border-radius:12px; background:#f8fafc; border:1px solid #e5e7eb; margin-bottom:8px;">
+                <div style="font-size:12px; line-height:1.5; color:#111827; word-break:break-word;">{{ item.alt or '图片' }}</div>
+                <div class="muted" style="font-size:11px; margin-top:4px;">{{ item.type or item.source_attr or 'image' }}{% if item.width %} · {{ item.width }}px{% endif %}</div>
+              </a>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="muted">暂无图片</div>
+        {% endif %}
+      </div>
+      <div class="card">
+        <div class="muted" style="margin-bottom:10px;">视频预览</div>
+        {% if article.video_urls %}
+          <div class="stack" style="gap:12px;">
+            {% for item in article.video_urls %}
+              <div class="report-link-card">
+                <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start; margin-bottom:6px;">
+                  <div style="font-weight:700; color:#111827; line-height:1.5;">{{ item.title or item.vid or item.id or '视频' }}</div>
+                  <span class="badge warn">视频</span>
+                </div>
+                {% if item.cover_url %}
+                  <a href="{{ item.url or '#' }}" target="_blank">
+                    <img src="{{ item.cover_proxy_url or item.cover_url }}" alt="视频封面" style="display:block; width:100%; aspect-ratio:16 / 9; object-fit:cover; border-radius:12px; background:#f8fafc; border:1px solid #e5e7eb; margin:8px 0 10px;">
+                  </a>
+                {% endif %}
+                {% if item.url %}
+                  <div><a class="source-link" href="{{ item.url }}" target="_blank">{{ item.url }}</a></div>
+                {% endif %}
+                <div class="muted" style="font-size:11px; margin-top:6px; word-break:break-word;">
+                  {{ item.tag or 'video' }}{% if item.source_attr %} · {{ item.source_attr }}{% endif %}{% if item.vid %} · {{ item.vid }}{% endif %}
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="muted">暂无视频</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <details class="card" style="margin-bottom:18px;">
+      <summary style="cursor:pointer; font-weight:700;">查看原始结构化媒体链接</summary>
+      <div class="grid cols-2" style="grid-template-columns:1fr 1fr; gap:16px; margin-top:14px;">
+        <div>
+          <div class="muted" style="margin-bottom:8px;">图片链接</div>
+          {% if article.image_urls %}
+            <ul class="report-list">
+              {% for item in article.image_urls %}
+                <li><a class="source-link" href="{{ item.url }}" target="_blank">{{ item.url }}</a></li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <div class="muted">暂无</div>
+          {% endif %}
+        </div>
+        <div>
+          <div class="muted" style="margin-bottom:8px;">视频链接</div>
+          {% if article.video_urls %}
+            <ul class="report-list">
+              {% for item in article.video_urls %}
+                <li>
+                  {% if item.url %}
+                    <a class="source-link" href="{{ item.url }}" target="_blank">{{ item.url }}</a>
+                  {% elif item.vid %}
+                    <span>{{ item.vid }}</span>
+                  {% else %}
+                    <span>{{ item }}</span>
+                  {% endif %}
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <div class="muted">暂无</div>
+          {% endif %}
+        </div>
+      </div>
+    </details>
+
+    <h2>Markdown 正文</h2>
+    <pre style="white-space: pre-wrap; word-break: break-word; background: #f8fafc; border: 1px solid #e5e7eb; padding: 18px; border-radius: 14px; line-height: 1.75;">{{ article.content_md or article.fetch_error or '正文尚未抓取完成' }}</pre>
+  </div>
+</div>
+{% endblock %}

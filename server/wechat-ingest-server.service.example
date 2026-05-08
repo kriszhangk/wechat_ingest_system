@@ -1,0 +1,16 @@
+[Unit]
+Description=WeChat Ingest Server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/.openclaw/workspace/wechat_ingest_system/server
+ExecStart=/root/.openclaw/workspace/wechat_ingest_system/server/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=3
+Environment=PYTHONUNBUFFERED=1
+# 建议改成你自己的密码，不要长期使用默认值
+Environment=WECHAT_ADMIN_PASSWORD=change_me_to_a_strong_password
+
+[Install]
+WantedBy=multi-user.target

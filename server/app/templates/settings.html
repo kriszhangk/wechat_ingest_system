@@ -1,0 +1,181 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-head">
+  <h1>日报设置</h1>
+  <p>这里集中配置日报选稿与展示的硬指标。当前已把 cluster 上限、正文信号上限整体翻倍，并把全局 max_clusters 提到 60。</p>
+</div>
+
+{% if saved %}
+  <div class="alert-item" style="background:var(--good-soft);border-color:#a7f3d0;color:#065f46;margin-bottom:16px;">设置已保存，后续新生成的日报会立即使用这套配置。</div>
+{% endif %}
+{% if reset %}
+  <div class="alert-item" style="background:var(--warn-soft);border-color:#fed7aa;color:#9a3412;margin-bottom:16px;">已恢复为当前系统默认值。</div>
+{% endif %}
+
+<div class="card" style="margin-bottom:16px;position:sticky;top:14px;z-index:5;">
+  <div class="toc" style="display:flex;gap:10px;flex-wrap:wrap;">
+    <a href="#sec-global">全局配额</a>
+    <a href="#sec-source">来源去重</a>
+    <a href="#sec-bonus">偏好放宽</a>
+    <a href="#sec-appendix">附录与 GitHub</a>
+    <a href="#sec-caps">候选 cluster 上限</a>
+    <a href="#sec-signals">正文信号上限</a>
+  </div>
+</div>
+
+<form method="post" action="/settings/save" class="stack" style="gap:18px;">
+  <div class="card">
+    <h3 style="margin-top:0;">最近 3 个活跃日的推荐阈值</h3>
+    {% if recommendations.summary %}
+      <p class="muted">基于最近 {{ recommendations.summary.active_days }} 个有数据的活跃日（{{ recommendations.days|join('、') }}）自动计算，方便你判断当前阈值是不是压得过紧或放得过松。最近活跃日平均原始文章数：{{ recommendations.summary.avg_raw_total }}。</p>
+      <div class="table-wrap" style="margin-top:12px;">
+        <table>
+          <thead>
+            <tr>
+              <th>方向</th>
+              <th>原始日均</th>
+              <th>入围 cluster 日均</th>
+              <th>最终信号日均</th>
+              <th>建议 cluster 上限</th>
+              <th>建议正文上限</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in recommendations.rows %}
+            <tr>
+              <td><strong>{{ row.direction }}</strong></td>
+              <td>{{ row.raw_avg }}<div class="muted" style="font-size:12px;">{{ row.raw_list|join(' / ') }}</div></td>
+              <td>{{ row.selected_avg }}</td>
+              <td>{{ row.signal_avg }}<div class="muted" style="font-size:12px;">{{ row.signal_list|join(' / ') }}</div></td>
+              <td><span class="badge good">{{ row.recommended_cap }}</span></td>
+              <td><span class="badge">{{ row.recommended_signal }}</span></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="muted">最近没有足够的活跃日报数据，暂时无法给出推荐阈值。</div>
+    {% endif %}
+  </div>
+
+  <div id="sec-global" class="card">
+    <h3 style="margin-top:0;">全局配额</h3>
+    <p class="muted">控制整份日报最多保留多少个候选主题，以及至少为长尾方向预留多少个名额。</p>
+    <div class="grid cols-3">
+      <div class="field">
+        <label>max_clusters</label>
+        <input type="number" name="max_clusters" min="1" max="200" value="{{ settings.selection.max_clusters }}">
+      </div>
+      <div class="field">
+        <label>longtail_min</label>
+        <input type="number" name="longtail_min" min="0" max="50" value="{{ settings.selection.longtail_min }}">
+      </div>
+      <div class="field">
+        <label>最后保存时间</label>
+        <input type="text" value="{{ settings.updated_at }}" disabled>
+      </div>
+    </div>
+  </div>
+
+  <div id="sec-source" class="card">
+    <h3 style="margin-top:0;">来源去重</h3>
+    <p class="muted">控制同一方向内，同一来源最多能出现几条。默认来源一般建议保守，特殊来源可单独放宽。</p>
+    <div class="grid cols-3">
+      <div class="field">
+        <label>默认同源上限</label>
+        <input type="number" name="same_source_cap_default" min="1" max="20" value="{{ settings.selection.same_source_cap_default }}">
+      </div>
+      <div class="field">
+        <label>国际局势 / 环球网上限</label>
+        <input type="number" name="same_source_cap_geo_huanqiu" min="1" max="20" value="{{ settings.selection.same_source_cap_geo_huanqiu }}">
+      </div>
+      <div class="field">
+        <label>中国军事 / 环球网上限</label>
+        <input type="number" name="same_source_cap_military_huanqiu" min="1" max="20" value="{{ settings.selection.same_source_cap_military_huanqiu }}">
+      </div>
+    </div>
+  </div>
+
+  <div id="sec-bonus" class="card">
+    <h3 style="margin-top:0;">偏好放宽</h3>
+    <p class="muted">当某个方向命中偏好画像中的 boost_directions 时，会在正文信号上限基础上追加名额。</p>
+    <div class="grid cols-3">
+      <div class="field">
+        <label>AI / 大模型 额外名额</label>
+        <input type="number" name="preferred_bonus_ai" min="0" max="20" value="{{ settings.selection.preferred_bonus_ai }}">
+      </div>
+      <div class="field">
+        <label>核心方向额外名额</label>
+        <input type="number" name="preferred_bonus_core" min="0" max="20" value="{{ settings.selection.preferred_bonus_core }}">
+      </div>
+      <div class="field">
+        <label>长尾方向额外名额</label>
+        <input type="number" name="preferred_bonus_longtail" min="0" max="20" value="{{ settings.selection.preferred_bonus_longtail }}">
+      </div>
+    </div>
+  </div>
+
+  <div id="sec-appendix" class="card">
+    <h3 style="margin-top:0;">附录与 GitHub</h3>
+    <p class="muted">控制每条信号的引用源数量、每个方向的附录范围，以及 AI 方向里 GitHub 小节展示多少条项目。</p>
+    <div class="grid cols-3">
+      <div class="field">
+        <label>附录最少条数</label>
+        <input type="number" name="appendix_limit_min" min="1" max="20" value="{{ settings.selection.appendix_limit_min }}">
+      </div>
+      <div class="field">
+        <label>附录最多条数</label>
+        <input type="number" name="appendix_limit_max" min="1" max="20" value="{{ settings.selection.appendix_limit_max }}">
+      </div>
+      <div class="field">
+        <label>GitHub 小节项目数</label>
+        <input type="number" name="github_section_items" min="1" max="20" value="{{ settings.selection.github_section_items }}">
+      </div>
+      <div class="field">
+        <label>偏好方向，多源附录条数</label>
+        <input type="number" name="multi_source_appendix_items_preferred" min="1" max="20" value="{{ settings.selection.multi_source_appendix_items_preferred }}">
+      </div>
+      <div class="field">
+        <label>普通方向，多源附录条数</label>
+        <input type="number" name="multi_source_appendix_items_default" min="1" max="20" value="{{ settings.selection.multi_source_appendix_items_default }}">
+      </div>
+      <div class="field">
+        <label>单源附录条数</label>
+        <input type="number" name="single_source_appendix_items" min="1" max="20" value="{{ settings.selection.single_source_appendix_items }}">
+      </div>
+    </div>
+  </div>
+
+  <div id="sec-caps" class="card">
+    <h3 style="margin-top:0;">候选 cluster 上限</h3>
+    <p class="muted">这是每个方向在进入最终正文筛选前，最多还能保留多少个候选主题。量大方向建议更高。</p>
+    <div class="grid cols-2">
+      {% for direction in settings.directions %}
+      <div class="field">
+        <label>{{ direction }}</label>
+        <input type="number" name="direction_cap__{{ direction }}" min="0" max="200" value="{{ settings.direction_caps[direction] }}">
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div id="sec-signals" class="card">
+    <h3 style="margin-top:0;">正文信号上限</h3>
+    <p class="muted">这是每个方向最终能写进正文的最多条数。注意后面仍然会受到同题合并影响。</p>
+    <div class="grid cols-2">
+      {% for direction in settings.directions %}
+      <div class="field">
+        <label>{{ direction }}</label>
+        <input type="number" name="signal_limit__{{ direction }}" min="0" max="200" value="{{ settings.signal_limits[direction] }}">
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="quick-actions">
+    <button type="submit" name="action" value="save">保存设置</button>
+    <button type="submit" name="action" value="reset" style="background:linear-gradient(135deg,#d97706,#ea580c);">恢复默认</button>
+  </div>
+</form>
+{% endblock %}

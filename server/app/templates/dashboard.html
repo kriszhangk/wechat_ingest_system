@@ -1,0 +1,749 @@
+{% extends 'base.html' %}
+{% block content %}
+<style>
+  .chart-shell { position: relative; }
+  .chart-svg { overflow: visible; }
+  .chart-grid-line { stroke: #e5e7eb; stroke-width: 1; stroke-dasharray: 4 4; }
+  .chart-y-label { fill: #94a3b8; font-size: 11px; }
+  .chart-value-label { fill: #475569; font-size: 11px; font-weight: 700; pointer-events: none; user-select: none; }
+  .chart-dot { pointer-events: none; }
+  .chart-hit-dot { fill: transparent; cursor: pointer; }
+  .chart-hover {
+    position: absolute; display: none; pointer-events: none; z-index: 20;
+    min-width: 120px; max-width: 220px; padding: 10px 12px; border-radius: 12px;
+    background: rgba(15,23,42,.94); color: #fff; box-shadow: 0 12px 30px rgba(15,23,42,.18);
+    font-size: 12px; line-height: 1.5;
+  }
+  .chart-hover .muted-mini { color: rgba(255,255,255,.72); font-size: 11px; }
+  .chart-stat-row { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  .section-nav { display:flex; gap:10px; flex-wrap:wrap; margin-top:14px; }
+  .section-nav a { padding:8px 12px; border-radius:999px; border:1px solid var(--line); background:#fff; font-weight:700; color:var(--text); }
+  .alert-grid { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:14px; margin:18px 0; }
+  .alert-card { padding:16px; border-radius:18px; border:1px solid var(--line); background:#fff; box-shadow: var(--shadow); }
+  .alert-card.bad { border-color:#fecaca; background:var(--bad-soft); }
+  .alert-card.warn { border-color:#fed7aa; background:var(--warn-soft); }
+  .alert-title { font-size:16px; font-weight:800; margin-top:8px; }
+  .alert-actions { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:12px; flex-wrap:wrap; }
+  .alert-actions a { font-weight:700; }
+  .mini-grid { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:12px; }
+  .section-head { display:flex; justify-content:space-between; align-items:flex-end; gap:12px; flex-wrap:wrap; margin-top:26px; }
+  .section-head h2 { margin:0; }
+  .section-head p { margin:6px 0 0 0; color:var(--muted); }
+  .funnel-grid { display:grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap:10px; margin-top:14px; }
+  .funnel-step { padding:14px; border-radius:16px; background:#f8fafc; border:1px solid var(--line); }
+  .funnel-step .value { font-size:26px; font-weight:900; margin-top:6px; }
+  .funnel-step .sub { color:var(--muted); font-size:12px; margin-top:6px; }
+  .inline-badges { display:flex; gap:8px; flex-wrap:wrap; }
+  .stat-list { display:flex; flex-direction:column; gap:10px; margin-top:12px; }
+  .stat-row { display:flex; justify-content:space-between; gap:12px; align-items:center; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:#f8fafc; }
+  .split-list { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:12px; }
+  .anchor-offset { scroll-margin-top: 90px; }
+  @media (max-width: 1100px) {
+    .alert-grid, .funnel-grid, .split-list, .mini-grid { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 720px) {
+    .alert-grid, .funnel-grid, .split-list, .mini-grid { grid-template-columns: 1fr; }
+  }
+</style>
+
+<div class="page-head">
+  <h1>系统仪表盘</h1>
+  <p>把首页改成决策台，先看健康，再看今天要做什么，最后看系统为什么这样判断。</p>
+</div>
+
+<div class="hero-panel">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;">
+    <div>
+      <div class="card-title">当前状态</div>
+      <div style="font-size:26px;font-weight:900;margin-top:8px;">{{ hero_status.label }}</div>
+      <div class="muted" style="margin-top:6px;">{{ hero_status.detail }}</div>
+      <div class="section-nav">
+        <a href="#health">系统健康</a>
+        <a href="#actions">今日动作</a>
+        <a href="#explain">解释与复盘</a>
+      </div>
+    </div>
+    <div style="min-width:320px;max-width:560px;">
+      <div class="card-title">快捷动作</div>
+      <div class="quick-actions" style="margin-top:10px;">
+        <a href="/reports">查看日报</a>
+        <a href="/targets">管理 Targets</a>
+        <a href="/tasks?status=pending">Pending Tasks</a>
+        <a href="/tasks?status=done">Done Tasks</a>
+        <a href="/articles?fetch_status=failed">失败 Articles</a>
+        <a href="/articles?pref_state=unset&fetch_status=done">补标队列</a>
+        <a href="/article-preferences">偏好画像</a>
+      </div>
+    </div>
+    <div class="badge {{ hero_status.badge }}">{{ alerts|length }} 个告警 / 线索</div>
+  </div>
+</div>
+
+{% if alerts %}
+<div class="alert-grid">
+  {% for alert in alerts %}
+    <div class="alert-card {{ alert.tone }}">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span class="badge {{ alert.tone }}">{{ alert.level_label }} 优先级</span>
+        {% if alert.impact %}<span class="muted">{{ alert.impact }}</span>{% endif %}
+      </div>
+      <div class="alert-title">{{ alert.title }}</div>
+      <div class="muted" style="margin-top:8px;">{{ alert.message }}</div>
+      {% if alert.action_url %}
+        <div class="alert-actions">
+          <span class="muted">建议动作</span>
+          <a href="{{ alert.action_url }}">{{ alert.action_label or '去处理' }}</a>
+        </div>
+      {% endif %}
+    </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div id="health" class="anchor-offset section-head">
+  <div>
+    <h2>系统健康</h2>
+    <p>先看调度、入库、时间窗和坏 target，避免“其实系统正常但首页看不出来”。</p>
+  </div>
+</div>
+
+<div class="grid cols-4">
+  <div class="card"><div class="card-title">启用目标源</div><div class="metric">{{ metrics.targets.enabled }}</div><div class="muted">未解析 {{ metrics.targets.unresolved }}，从未调度 {{ metrics.targets.never_dispatched }}</div></div>
+  <div class="card"><div class="card-title">Worker 活跃</div><div class="metric">{{ metrics.workers.active_5m }}</div><div class="muted">总 Worker {{ metrics.workers.total }}</div></div>
+  <div class="card"><div class="card-title">Pending 任务</div><div class="metric">{{ metrics.tasks.pending }}</div><div class="muted">超时 pending {{ metrics.tasks.stale_pending }}</div></div>
+  <div class="card"><div class="card-title">24h 新增文章</div><div class="metric">{{ metrics.articles.last_24h }}</div><div class="muted">抓取失败 {{ metrics.articles.failed }}</div></div>
+</div>
+
+<div class="grid cols-4">
+  <div class="card"><div class="card-title">Worker 活跃占比</div><div class="metric">{{ health.worker_active_ratio }}%</div><div class="progress"><span style="width: {{ health.worker_active_ratio }}%"></span></div></div>
+  <div class="card"><div class="card-title">任务成功率</div><div class="metric">{{ health.task_success_ratio }}%</div><div class="progress"><span style="width: {{ health.task_success_ratio }}%"></span></div></div>
+  <div class="card"><div class="card-title">文章抓取完成率</div><div class="metric">{{ health.article_done_ratio }}%</div><div class="progress"><span style="width: {{ health.article_done_ratio }}%"></span></div></div>
+  <div class="card"><div class="card-title">偏好覆盖率</div><div class="metric">{{ health.article_labeled_ratio }}%</div><div class="progress"><span style="width: {{ health.article_labeled_ratio }}%"></span></div></div>
+</div>
+
+<div class="grid cols-2">
+  <div class="card stack">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+      <div>
+        <h3>报表时间窗状态</h3>
+        <div class="muted" style="margin-top:6px;">把 report_state 当成真相源，显式看到空窗推进和当前开放窗口。</div>
+      </div>
+      <a href="/reports">查看 Reports</a>
+    </div>
+    <div class="split-list">
+      {% for card in [report_cadence.morning, report_cadence.evening] %}
+        <div class="report-link-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+            <div style="font-weight:800;font-size:18px;">{{ card.label }}</div>
+            <span class="badge {{ card.state_badge }}">{{ card.state_status_label }}</span>
+          </div>
+          <div class="stat-list" style="margin-top:10px;">
+            <div class="stat-row"><span class="muted">下一次窗口起点</span><strong>{{ card.next_start_at }}</strong></div>
+            <div class="stat-row"><span class="muted">最近一次 state 提交</span><strong>{{ card.last_state_at }}</strong></div>
+            <div class="stat-row"><span class="muted">最近一次 report</span><strong>{{ card.last_report_at }}</strong></div>
+          </div>
+          <div class="inline-badges" style="margin-top:12px;">
+            <span class="badge">窗口候选 {{ card.candidate_count }}</span>
+            <span class="badge good">ready {{ card.ready_count }}</span>
+            <span class="badge warn">未标 {{ card.unset_count }}</span>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="card stack">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+      <div>
+        <h3>采集漏斗</h3>
+        <div class="muted" style="margin-top:6px;">把任务下发、worker 上报、服务端入库、正文抓取串成一条可解释链路。</div>
+      </div>
+      <span class="badge">{{ task_funnel.since_label }}</span>
+    </div>
+    <div class="funnel-grid">
+      {% for stage in task_funnel.stages %}
+        <div class="funnel-step">
+          <div class="card-title">{{ stage.label }}</div>
+          <div class="value">{{ stage.value }}</div>
+          <div class="sub">{{ stage.sub }}</div>
+        </div>
+      {% endfor %}
+    </div>
+    {% if task_funnel.drop_breakdown %}
+      <div>
+        <div class="muted" style="margin:12px 0 8px 0;">关键损耗点</div>
+        <div class="inline-badges">
+          {% for item in task_funnel.drop_breakdown %}
+            <span class="badge {{ item.tone }}">{{ item.label }} {{ item.value }}</span>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+    {% if task_funnel.notes %}
+      <div class="stack">
+        {% for note in task_funnel.notes %}
+          <div class="muted">• {{ note }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="grid cols-2">
+  <div class="card stack">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+      <div>
+        <h3>Done 但 0 新增文章</h3>
+        <div class="muted" style="margin-top:6px;">把最容易误判的“done = 有新增”拆开看。</div>
+      </div>
+      <a href="/tasks?status=done">查看 Done Tasks</a>
+    </div>
+    <div class="mini-grid">
+      <div class="report-link-card"><div class="card-title">最近 24h Done</div><div class="metric">{{ zero_insert_summary.done_tasks }}</div></div>
+      <div class="report-link-card"><div class="card-title">其中 0 新增</div><div class="metric">{{ zero_insert_summary.zero_insert_count }}</div></div>
+    </div>
+    {% if zero_insert_summary.reason_items %}
+      <div class="inline-badges">
+        {% for item in zero_insert_summary.reason_items %}
+          <span class="badge {{ item.tone }}">{{ item.label }} {{ item.value }}</span>
+        {% endfor %}
+      </div>
+    {% endif %}
+    {% if zero_insert_summary.examples %}
+      <div class="stack">
+        {% for item in zero_insert_summary.examples %}
+          <div class="report-link-card">
+            <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;">
+              <div style="font-weight:800;">{{ item.account_name }}</div>
+              <a href="{{ item.task_url }}">看任务</a>
+            </div>
+            <div class="muted" style="margin-top:6px;">{{ item.task_id }} · {{ item.created_at }}</div>
+            <div class="inline-badges" style="margin-top:8px;">
+              {% for reason in item.reasons %}<span class="badge warn">{{ reason }}</span>{% endfor %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="muted">最近 24 小时暂无可解释的 0 新增任务样本。</div>
+    {% endif %}
+  </div>
+
+  <div class="card stack">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+      <div>
+        <h3>需要留意的 Targets</h3>
+        <div class="muted" style="margin-top:6px;">把坏 target 提前暴露，避免问题一直摊在全局指标里。</div>
+      </div>
+      <a href="/targets">看 Targets</a>
+    </div>
+    <div class="inline-badges">
+      <span class="badge warn">弱 target {{ target_watchlist.weak_count }}</span>
+      <span class="badge">未解析 fakeid {{ target_watchlist.unresolved_count }}</span>
+    </div>
+    {% if target_watchlist.rows %}
+      <div class="stack">
+        {% for item in target_watchlist.rows %}
+          <div class="report-link-card">
+            <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;">
+              <div style="font-weight:800;">{{ item.account_name }}</div>
+              <span class="badge {{ item.health_badge }}">{{ item.health_label }}</span>
+            </div>
+            <div class="inline-badges" style="margin-top:8px;">
+              <span class="badge">优先级 {{ item.priority }}</span>
+              <span class="badge">done {{ item.done_count }}</span>
+              <span class="badge warn">failed {{ item.failed_count }}</span>
+              <span class="badge warn">0 入库 {{ item.zero_insert_count }}</span>
+            </div>
+            <div class="muted" style="margin-top:8px;">{{ item.reasons|join(' / ') }}</div>
+            <div style="margin-top:8px;"><a href="{{ item.task_url }}">看这个 target 的任务</a></div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="muted">当前没有明显需要优先关注的 target。</div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="grid cols-2">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;"><h3>文章趋势（最近 7 天）</h3><span class="badge">折线图</span></div>
+    <div class="chart-shell">
+      <div class="chart-hover"></div>
+      <svg class="chart-svg" viewBox="0 0 {{ charts.articles.width }} {{ charts.articles.height }}" width="100%" height="220">
+        {% for tick in charts.articles.y_ticks %}
+          <line class="chart-grid-line" x1="24" y1="{{ tick.y }}" x2="{{ charts.articles.width - 24 }}" y2="{{ tick.y }}"></line>
+          <text class="chart-y-label" x="8" y="{{ tick.y + 4 }}">{{ tick.value }}</text>
+        {% endfor %}
+        {% for path in charts.articles.paths %}<path d="{{ path.d }}" fill="none" stroke="{{ path.color }}" stroke-width="3" stroke-linecap="round" />{% endfor %}
+        {% for dot in charts.articles.dots %}
+          <circle class="chart-hit-dot" cx="{{ dot.x }}" cy="{{ dot.y }}" r="12" data-date="{{ dot.date_label }}" data-series="{{ dot.series_label }}" data-value="{{ dot.value }}"></circle>
+          <circle class="chart-dot" cx="{{ dot.x }}" cy="{{ dot.y }}" r="4.5" fill="{{ dot.color }}"></circle>
+          <text class="chart-value-label" x="{{ dot.x }}" y="{{ dot.value_y }}" text-anchor="middle">{{ dot.value }}</text>
+        {% endfor %}
+        {% for label in charts.articles.labels %}<text x="{{ label.x }}" y="{{ charts.articles.height - 4 }}" text-anchor="middle" font-size="11" fill="#6b7280">{{ label.text }}</text>{% endfor %}
+      </svg>
+    </div>
+    <div class="chart-stat-row">
+      {% for p in trend.articles %}<span class="badge">{{ p.d[5:] }}：{{ p.c }}</span>{% endfor %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;"><h3>任务趋势（最近 7 天）</h3><span class="badge">Done / Failed</span></div>
+    <div style="display:flex;gap:12px;margin-bottom:8px;"><span class="badge">蓝：Done</span><span class="badge warn">紫：Failed</span></div>
+    <div class="chart-shell">
+      <div class="chart-hover"></div>
+      <svg class="chart-svg" viewBox="0 0 {{ charts.tasks.width }} {{ charts.tasks.height }}" width="100%" height="220">
+        {% for tick in charts.tasks.y_ticks %}
+          <line class="chart-grid-line" x1="24" y1="{{ tick.y }}" x2="{{ charts.tasks.width - 24 }}" y2="{{ tick.y }}"></line>
+          <text class="chart-y-label" x="8" y="{{ tick.y + 4 }}">{{ tick.value }}</text>
+        {% endfor %}
+        {% for path in charts.tasks.paths %}<path d="{{ path.d }}" fill="none" stroke="{{ path.color }}" stroke-width="3" stroke-linecap="round" />{% endfor %}
+        {% for dot in charts.tasks.dots %}
+          <circle class="chart-hit-dot" cx="{{ dot.x }}" cy="{{ dot.y }}" r="12" data-date="{{ dot.date_label }}" data-series="{{ dot.series_label }}" data-value="{{ dot.value }}"></circle>
+          <circle class="chart-dot" cx="{{ dot.x }}" cy="{{ dot.y }}" r="4.5" fill="{{ dot.color }}"></circle>
+          <text class="chart-value-label" x="{{ dot.x }}" y="{{ dot.value_y }}" text-anchor="middle">{{ dot.value }}</text>
+        {% endfor %}
+        {% for label in charts.tasks.labels %}<text x="{{ label.x }}" y="{{ charts.tasks.height - 4 }}" text-anchor="middle" font-size="11" fill="#6b7280">{{ label.text }}</text>{% endfor %}
+      </svg>
+    </div>
+    <div class="chart-stat-row">
+      {% for p in trend.tasks %}<span class="badge">{{ p.d[5:] }}：Done {{ p.done_c }} / Failed {{ p.failed_c }}</span>{% endfor %}
+    </div>
+  </div>
+</div>
+
+<div id="actions" class="anchor-offset section-head">
+  <div>
+    <h2>今日动作</h2>
+    <p>把“训练偏好模型”和“复核日报漏选”分开处理，减少首页认知负担。</p>
+  </div>
+</div>
+
+<div class="grid cols-2">
+  <div class="card stack">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+      <div>
+        <h3>运营动作队列，优先补标</h3>
+        <div class="muted" style="margin-top:6px;">未标文章里最值得先看的那批，直接影响偏好画像质量。</div>
+      </div>
+      <a href="/articles?pref_state=unset&fetch_status=done">去补标</a>
+    </div>
+    {% if priority_unlabeled_candidates %}
+      {% for a in priority_unlabeled_candidates %}
+        <div class="report-link-card">
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;">
+            <a class="report-link-title source-link" href="{{ a.article_url }}" target="_blank">{{ a.title }}</a>
+            <span class="badge {{ a.suggestion_badge }}">{{ a.suggestion_label }}</span>
+          </div>
+          <div class="muted" style="margin-top:6px;">{{ a.account_name or '未知公众号' }} · {{ a.discovered_at or '' }}</div>
+          <div class="inline-badges" style="margin-top:8px;">
+            <span class="badge">优先度 {{ a.candidate_score }}</span>
+            <span class="badge">偏好 {{ a.pref_score }}</span>
+            <span class="badge">AI {{ a.ai_rule_score }}</span>
+            <span class="badge">内容 {{ a.value_score }}</span>
+          </div>
+          <div class="inline-badges" style="margin-top:8px;">
+            {% for reason in a.candidate_reasons[:3] %}<span class="badge">{{ reason }}</span>{% endfor %}
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="muted">最近 7 天暂无明显值得优先补标的未设置文章。</div>
+    {% endif %}
+  </div>
+
+  <div class="card stack">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+      <div>
+        <h3>选稿复核队列</h3>
+        <div class="muted" style="margin-top:6px;">优先检查最新日报外的高信号候选，避免漏选。</div>
+      </div>
+      {% if latest_report %}<a href="/reports/{{ latest_report.id }}">对照最新日报</a>{% else %}<a href="/reports">看日报</a>{% endif %}
+    </div>
+    {% if review_queue %}
+      {% for a in review_queue %}
+        <div class="report-link-card">
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;">
+            <a class="report-link-title source-link" href="{{ a.article_url }}" target="_blank">{{ a.title }}</a>
+            <span class="badge {{ a.missed_badge or a.queue_badge }}">{{ a.missed_label or a.queue_label }}</span>
+          </div>
+          <div class="muted" style="margin-top:6px;">{{ a.direction or a.dashboard_direction }} · {{ a.account_name or '未知公众号' }} · {{ a.discovered_at or '' }}</div>
+          <div class="inline-badges" style="margin-top:8px;">
+            <span class="badge">复核分 {{ a.missed_score or a.priority_score }}</span>
+            <span class="badge">偏好 {{ a.pref_score or a.pref_signal_score }}</span>
+            <span class="badge">AI {{ a.ai_rule_score }}</span>
+            <span class="badge">内容 {{ a.value_score or a.value_signal_score }}</span>
+          </div>
+          <div class="inline-badges" style="margin-top:8px;">
+            {% for reason in (a.missed_reasons or a.system_explain_reasons or [])[:3] %}<span class="badge warn">{{ reason }}</span>{% endfor %}
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="muted">当前没有明显需要优先复核的日报外候选。</div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="grid cols-2">
+  <div class="card stack">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+      <div>
+        <h3>按方向看偏好缺口</h3>
+        <div class="muted" style="margin-top:6px;">把缺口最大的方向直接拉出来，适合集中补标。</div>
+      </div>
+      <a href="/articles?pref_state=unset&fetch_status=done">打开未标文章</a>
+    </div>
+    {% if direction_preference_gaps %}
+      {% for item in direction_preference_gaps %}
+        <div class="report-link-card">
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;">
+            <div style="font-weight:800;">{{ item.direction }}</div>
+            <span class="badge {{ item.gap_badge }}">{{ item.gap_label }}</span>
+          </div>
+          <div class="inline-badges" style="margin-top:8px;">
+            <span class="badge">近7天 {{ item.total }} 篇</span>
+            <span class="badge">已标 {{ item.labeled }}</span>
+            <span class="badge warn">未标 {{ item.unset }}</span>
+            <span class="badge good">关注 {{ item.follow }}</span>
+            <span class="badge bad">忽略 {{ item.ignore }}</span>
+            <span class="badge">本期入选 {{ item.in_report }}</span>
+          </div>
+          {% if item.examples %}
+            <div class="stack" style="margin-top:10px;gap:6px;">
+              {% for ex in item.examples[:2] %}
+                <div class="muted">• {{ ex.title }}{% if ex.reasons %}（{{ ex.reasons|join(' / ') }}）{% endif %}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="muted">最近 7 天暂无明显方向缺口。</div>
+    {% endif %}
+    {% if direction_quick_links %}
+      <div class="inline-badges">
+        {% for item in direction_quick_links %}
+          <a class="badge warn" href="{{ item.unset_url }}">{{ item.direction }} · 未标</a>
+          <a class="badge good" href="{{ item.all_url }}">{{ item.direction }} · 全部</a>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="card stack">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+      <div>
+        <h3>近 7 天方向分布总览</h3>
+        <div class="muted" style="margin-top:6px;">看清哪些方向本来就热，哪些方向只是覆盖差。</div>
+      </div>
+    </div>
+    {% if direction_activity_overview %}
+      <div class="mini-grid">
+        {% for item in direction_activity_overview %}
+          <div class="report-link-card">
+            <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;">
+              <div style="font-weight:800;">{{ item.direction }}</div>
+              <span class="badge">{{ item.total }} 篇</span>
+            </div>
+            <div class="inline-badges" style="margin-top:8px;">
+              <span class="badge good">24h {{ item.last_24h }}</span>
+              <span class="badge">已标 {{ item.labeled }}</span>
+              <span class="badge warn">未标 {{ item.unset }}</span>
+              <span class="badge">覆盖率 {{ item.coverage }}%</span>
+            </div>
+            {% if item.examples %}<div class="muted" style="margin-top:8px;">例如：{{ item.examples[0] }}</div>{% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="muted">近 7 天暂无方向分布数据。</div>
+    {% endif %}
+  </div>
+</div>
+
+<div id="explain" class="anchor-offset section-head">
+  <div>
+    <h2>解释与复盘</h2>
+    <p>把“为什么进日报”和“为什么没进日报”显式展示出来，减少靠脑补推理。</p>
+  </div>
+</div>
+
+{% if latest_report %}
+<div class="card stack" style="margin-bottom:18px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;">
+    <div>
+      <div class="card-title">最新日报摘要</div>
+      <div style="margin-top:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        {% if latest_report.report_type == 'morning' %}<span class="badge good">早报</span>{% else %}<span class="badge warn">晚报</span>{% endif %}
+        <span class="muted">{{ latest_report.created_at }}</span>
+      </div>
+    </div>
+    <a href="/reports/{{ latest_report.id }}">进入详情</a>
+  </div>
+  <div class="grid cols-3" style="margin-top:6px;">
+    {% for bullet in latest_report.summary_bullets[:3] %}
+      <div class="report-link-card">{{ bullet }}</div>
+    {% endfor %}
+  </div>
+  {% if latest_report.tldr %}
+    <div class="stack">
+      {% for item in latest_report.tldr[:3] %}<div class="muted">• {{ item }}</div>{% endfor %}
+    </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="grid cols-2">
+  <div class="card stack">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+      <h3>本次日报受偏好影响的文章</h3>
+      {% if latest_report %}<a href="/reports/{{ latest_report.id }}">查看本次日报</a>{% endif %}
+    </div>
+    {% if latest_report_preference_hits %}
+      {% for a in latest_report_preference_hits %}
+        <div class="report-link-card">
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;">
+            <a class="report-link-title source-link" href="{{ a.article_url }}" target="_blank">{{ a.title }}</a>
+            <span class="badge {{ a.impact_badge }}">{{ a.impact_label }}</span>
+          </div>
+          <div class="muted" style="margin-top:6px;">{{ a.account_name or '未知公众号' }} · {{ a.discovered_at or '' }}</div>
+          <div class="inline-badges" style="margin-top:8px;">
+            {% for reason in a.pref_reasons %}<span class="badge">{{ reason }}</span>{% endfor %}
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="muted">当前这期日报里，暂未识别出明显受偏好提权 / 压低的文章。</div>
+    {% endif %}
+  </div>
+
+  <div class="card stack">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+      <h3>本次日报受 AI 规则影响的文章</h3>
+      {% if latest_report %}<a href="/reports/{{ latest_report.id }}">查看本次日报</a>{% endif %}
+    </div>
+    {% if latest_report_ai_rule_impacts %}
+      {% for a in latest_report_ai_rule_impacts %}
+        <div class="report-link-card">
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;">
+            <a class="report-link-title source-link" href="{{ a.article_url }}" target="_blank">{{ a.title }}</a>
+            <span class="badge {{ a.ai_impact_badge }}">{{ a.ai_impact_label }}</span>
+          </div>
+          <div class="muted" style="margin-top:6px;">{{ a.account_name or '未知公众号' }} · {{ a.discovered_at or '' }}</div>
+          <div class="inline-badges" style="margin-top:8px;">
+            <span class="badge">AI分 {{ a.ai_rule_score }}</span>
+            {% for reason in a.ai_rule_reasons %}<span class="badge good">{{ reason }}</span>{% endfor %}
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="muted">当前这期日报里，暂未识别出明显受 AI 规则影响的文章。</div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="grid cols-2">
+  <div class="card stack">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+      <h3>入选 vs 未入选，对照解释</h3>
+      {% if latest_report %}<a href="/reports/{{ latest_report.id }}">查看本次日报</a>{% endif %}
+    </div>
+    {% if selection_comparisons %}
+      {% for pair in selection_comparisons %}
+        <div class="report-link-card">
+          <div style="font-weight:800;margin-bottom:10px;">{{ pair.direction }}</div>
+          <div class="stack" style="gap:10px;">
+            <div>
+              <div class="muted" style="margin-bottom:6px;">为什么这篇进了日报</div>
+              <a class="report-link-title source-link" href="{{ pair.selected.article_url }}" target="_blank">{{ pair.selected.title }}</a>
+              <div class="inline-badges" style="margin-top:8px;">
+                {% for reason in pair.selected.selected_reasons[:4] %}<span class="badge good">{{ reason }}</span>{% endfor %}
+              </div>
+            </div>
+            <div>
+              <div class="muted" style="margin-bottom:6px;">为什么这篇值得复核但没进</div>
+              <a class="report-link-title source-link" href="{{ pair.missed.article_url }}" target="_blank">{{ pair.missed.title }}</a>
+              <div class="inline-badges" style="margin-top:8px;">
+                {% for reason in pair.missed.missed_reasons[:4] %}<span class="badge warn">{{ reason }}</span>{% endfor %}
+              </div>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="muted">当前暂无足够样本可用于展示入选 / 未入选对照。</div>
+    {% endif %}
+  </div>
+
+  <div class="card stack">
+    <div style="display:flex;justify-content:space-between;align-items:center;"><h3>偏好画像快照</h3><a href="/article-preferences">进入详情</a></div>
+    <div class="report-link-card">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;">
+        <div>
+          <div style="font-weight:800;">画像最近更新时间</div>
+          <div class="muted" style="margin-top:4px;">{{ metrics.preferences.profile_updated_at }}</div>
+        </div>
+        <div class="inline-badges">
+          <span class="badge">已标 {{ metrics.preferences.labeled }}</span>
+          <span class="badge good">关注 {{ metrics.preferences.follow }}</span>
+          <span class="badge bad">忽略 {{ metrics.preferences.ignore }}</span>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="muted" style="margin-bottom:8px;">更常关注的来源</div>
+      {% if profile.preferred_sources %}
+        <div class="inline-badges">{% for item in profile.preferred_sources[:8] %}<span class="badge good">{{ item }}</span>{% endfor %}</div>
+      {% else %}
+        <div class="muted">暂无明显偏好来源</div>
+      {% endif %}
+    </div>
+    <div>
+      <div class="muted" style="margin-bottom:8px;">近期高频偏好主题词</div>
+      {% if profile.preferred_terms %}
+        <div class="inline-badges">{% for item in profile.preferred_terms[:12] %}<span class="badge">{{ item }}</span>{% endfor %}</div>
+      {% else %}
+        <div class="muted">暂无明显偏好主题词</div>
+      {% endif %}
+    </div>
+    <div>
+      <div class="muted" style="margin-bottom:8px;">近期高频忽略词</div>
+      {% if profile.ignored_terms %}
+        <div class="inline-badges">{% for item in profile.ignored_terms[:10] %}<span class="badge bad">{{ item }}</span>{% endfor %}</div>
+      {% else %}
+        <div class="muted">暂无明显忽略词</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="grid cols-2">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;"><h3>偏好标记趋势（最近 7 天）</h3><span class="badge">关注 / 忽略 / 中性</span></div>
+    <div style="display:flex;gap:12px;margin-bottom:8px;"><span class="badge good">绿：关注</span><span class="badge bad">红：忽略</span><span class="badge">蓝：中性</span></div>
+    <div class="chart-shell">
+      <div class="chart-hover"></div>
+      <svg class="chart-svg" viewBox="0 0 {{ charts.preferences.width }} {{ charts.preferences.height }}" width="100%" height="220">
+        {% for tick in charts.preferences.y_ticks %}
+          <line class="chart-grid-line" x1="24" y1="{{ tick.y }}" x2="{{ charts.preferences.width - 24 }}" y2="{{ tick.y }}"></line>
+          <text class="chart-y-label" x="8" y="{{ tick.y + 4 }}">{{ tick.value }}</text>
+        {% endfor %}
+        {% for path in charts.preferences.paths %}<path d="{{ path.d }}" fill="none" stroke="{{ path.color }}" stroke-width="3" stroke-linecap="round" />{% endfor %}
+        {% for dot in charts.preferences.dots %}
+          <circle class="chart-hit-dot" cx="{{ dot.x }}" cy="{{ dot.y }}" r="12" data-date="{{ dot.date_label }}" data-series="{{ dot.series_label }}" data-value="{{ dot.value }}"></circle>
+          <circle class="chart-dot" cx="{{ dot.x }}" cy="{{ dot.y }}" r="4.5" fill="{{ dot.color }}"></circle>
+          <text class="chart-value-label" x="{{ dot.x }}" y="{{ dot.value_y }}" text-anchor="middle">{{ dot.value }}</text>
+        {% endfor %}
+        {% for label in charts.preferences.labels %}<text x="{{ label.x }}" y="{{ charts.preferences.height - 4 }}" text-anchor="middle" font-size="11" fill="#6b7280">{{ label.text }}</text>{% endfor %}
+      </svg>
+    </div>
+    <div class="chart-stat-row">
+      {% for p in trend.preferences %}<span class="badge">{{ p.d[5:] }}：关注 {{ p.follow_c }} / 忽略 {{ p.ignore_c }} / 中性 {{ p.neutral_c }}</span>{% endfor %}
+    </div>
+  </div>
+
+  <div class="grid cols-2" style="margin:0;">
+    <div class="card stack">
+      <div style="display:flex;justify-content:space-between;align-items:center;"><h3>最近日报</h3><a href="/reports">查看全部</a></div>
+      {% for r in recent_reports %}
+        <div class="report-link-card">
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;">
+            <div>{% if r.report_type == 'morning' %}<span class="badge good">早报</span>{% else %}<span class="badge warn">晚报</span>{% endif %} <span class="muted">{{ r.created_at }}</span></div>
+            <a href="/reports/{{ r.id }}">查看</a>
+          </div>
+          <div class="stack" style="margin-top:8px;gap:6px;">{% for bullet in r.summary_bullets[:2] %}<div>• {{ bullet }}</div>{% endfor %}</div>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="card stack">
+      <div style="display:flex;justify-content:space-between;align-items:center;"><h3>最近标注文章</h3><a href="/articles">去 Articles</a></div>
+      {% for a in recent_labeled_articles %}
+        <div class="report-link-card">
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;">
+            <div style="font-weight:700;">{{ a.title }}</div>
+            {% if a.user_pref_state == 'follow' %}<span class="badge good">关注</span>{% elif a.user_pref_state == 'ignore' %}<span class="badge bad">忽略</span>{% elif a.user_pref_state == 'neutral' %}<span class="badge">中性</span>{% else %}<span class="badge warn">未设置</span>{% endif %}
+          </div>
+          <div class="muted" style="margin-top:6px;">{{ a.account_name or '未知公众号' }} · {{ a.user_pref_updated_at or '' }}</div>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="card stack">
+      <div style="display:flex;justify-content:space-between;align-items:center;"><h3>最近失败任务</h3><a href="/tasks">查看全部</a></div>
+      {% for t in recent_failed_tasks %}
+        <div class="report-link-card">
+          <div style="font-weight:700;">{{ t.account_name or '未知公众号' }}</div>
+          <div class="muted">{{ t.task_id }}</div>
+          <div style="margin-top:6px;">{{ t.error_message or '无错误详情' }}</div>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="card stack">
+      <div style="display:flex;justify-content:space-between;align-items:center;"><h3>最近抓取失败文章</h3><a href="/articles?fetch_status=failed">查看全部</a></div>
+      {% for a in recent_failed_articles %}
+        <div class="report-link-card">
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;">
+            <div style="font-weight:700;">{{ a.title }}</div>
+            <span class="badge {{ a.fetch_meta.badge }}">{{ a.fetch_meta.label }}</span>
+          </div>
+          <div class="muted">{{ a.account_name or '未知公众号' }}</div>
+          <div style="margin-top:6px;">{{ a.fetch_error or '无错误详情' }}</div>
+        </div>
+      {% else %}
+        <div class="muted">最近没有新的抓取失败文章。</div>
+      {% endfor %}
+    </div>
+
+    <div class="card stack">
+      <div style="display:flex;justify-content:space-between;align-items:center;"><h3>最近删除/不可见文章</h3><a href="/articles?fetch_status=deleted">查看全部</a></div>
+      {% for a in recent_deleted_articles %}
+        <div class="report-link-card">
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;">
+            <div style="font-weight:700;">{{ a.title }}</div>
+            <span class="badge {{ a.fetch_meta.badge }}">{{ a.fetch_meta.label }}</span>
+          </div>
+          <div class="muted">{{ a.account_name or '未知公众号' }}</div>
+          <div style="margin-top:6px;">{{ a.fetch_error or '无错误详情' }}</div>
+        </div>
+      {% else %}
+        <div class="muted">最近没有删除或不可见文章。</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<script>
+  (function(){
+    const shells = Array.from(document.querySelectorAll('.chart-shell'));
+    shells.forEach(shell => {
+      const tooltip = shell.querySelector('.chart-hover');
+      const dots = shell.querySelectorAll('.chart-hit-dot');
+      if (!tooltip || !dots.length) return;
+      function hideTip(){ tooltip.style.display = 'none'; }
+      dots.forEach(dot => {
+        dot.addEventListener('mouseenter', () => {
+          const date = dot.getAttribute('data-date') || '';
+          const series = dot.getAttribute('data-series') || '数值';
+          const value = dot.getAttribute('data-value') || '0';
+          tooltip.innerHTML = `<div class="muted-mini">${date}</div><div style="font-weight:800;margin-top:4px;">${series}</div><div style="font-size:20px;font-weight:900;line-height:1.2;">${value}</div>`;
+          tooltip.style.display = 'block';
+          const shellRect = shell.getBoundingClientRect();
+          const dotRect = dot.getBoundingClientRect();
+          const left = Math.max(8, Math.min(shellRect.width - 140, dotRect.left - shellRect.left + 12));
+          const top = Math.max(8, dotRect.top - shellRect.top - 12 - tooltip.offsetHeight);
+          tooltip.style.left = left + 'px';
+          tooltip.style.top = top + 'px';
+        });
+        dot.addEventListener('mouseleave', hideTip);
+      });
+      shell.addEventListener('mouseleave', hideTip);
+    });
+  })();
+</script>
+{% endblock %}
