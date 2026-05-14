@@ -167,6 +167,26 @@ class WechatCollector:
     def close(self):
         self.log("close() 被调用；当前配置为调试模式，不主动关闭浏览器")
 
+    def refresh_homepage_session(self, reason: str = "scheduled_cookie_keepalive"):
+        """Refresh mp.weixin.qq.com in the persistent browser context.
+
+        This is intentionally separate from task fetching so the runner can pause
+        polling while the page refreshes and resume only after a successful load.
+        """
+        self.ensure_browser_alive()
+        self.log(f"开始刷新公众号首页以保持 cookie 活跃: reason={reason}")
+        page = self._prepare_refresh_page(self.page, reason=reason)
+        try:
+            page.goto("https://mp.weixin.qq.com/", wait_until="domcontentloaded", timeout=30000)
+            page.wait_for_timeout(3000)
+            self._set_active_page(page, reason=reason)
+            self.log(f"公众号首页刷新成功: url={page.url}")
+            self._dump(page, "scheduled_homepage_refresh")
+            return True
+        except Exception as e:
+            self.log(f"公众号首页刷新失败: err={e}")
+            raise
+
     def fetch_articles(self, keyword: str, resolved_fakeid: str | None = None, min_publish_time: int | None = None, max_items: int | None = None):
         self.ensure_browser_alive()
         self.request_urls = []

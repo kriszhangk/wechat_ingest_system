@@ -1,10 +1,10 @@
 import time
 import traceback
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from app.api.client import ServerClient
 from app.collector.wechat_collector import WechatCollector
-from app.config import WORKER_ID, POLL_INTERVAL_SECONDS
+from app.config import WORKER_ID, POLL_INTERVAL_SECONDS, HOMEPAGE_REFRESH_INTERVAL_SECONDS
 
 
 class WorkerRunner:
@@ -14,6 +14,7 @@ class WorkerRunner:
         self.log_dir = Path("./data/debug")
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.log_file = self.log_dir / "runner.log"
+        self.last_homepage_refresh_at = None
 
     def log(self, message: str):
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -25,7 +26,25 @@ class WorkerRunner:
         except Exception:
             pass
 
+    def _homepage_refresh_due(self):
+        if HOMEPAGE_REFRESH_INTERVAL_SECONDS <= 0:
+            return False
+        if self.last_homepage_refresh_at is None:
+            return True
+        return datetime.now() - self.last_homepage_refresh_at >= timedelta(seconds=HOMEPAGE_REFRESH_INTERVAL_SECONDS)
+
+    def _refresh_homepage_if_due(self):
+        if not self._homepage_refresh_due():
+            return
+        self.log(
+            f"达到公众号首页保活刷新间隔，暂停获取任务并刷新页面: interval_seconds={HOMEPAGE_REFRESH_INTERVAL_SECONDS}"
+        )
+        self.collector.refresh_homepage_session(reason="scheduled_before_poll")
+        self.last_homepage_refresh_at = datetime.now()
+        self.log("公众号首页刷新成功，恢复获取任务")
+
     def run_once(self):
+        self._refresh_homepage_if_due()
         self.log("开始 poll server")
         data = self.client.poll()
         tasks = data.get("tasks", [])
@@ -75,7 +94,7 @@ class WorkerRunner:
         return data.get("next_poll_seconds", POLL_INTERVAL_SECONDS)
 
     def run_forever(self):
-        self.log(f"worker 启动: WORKER_ID={WORKER_ID}")
+        self.log(f"worker 启动: WORKER_ID={WORKER_ID}, HOMEPAGE_REFRESH_INTERVAL_SECONDS={HOMEPAGE_REFRESH_INTERVAL_SECONDS}")
         self.collector.start()
         self.log("collector 已预热完成，进入轮询循环")
         while True:

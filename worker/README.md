@@ -62,6 +62,7 @@ playwright install chromium
 - `PERSISTENT_PROFILE_DIR`
 - `HEADLESS`
 - `POLL_INTERVAL_SECONDS`
+- `HOMEPAGE_REFRESH_INTERVAL_SECONDS`：默认 `1800`，Worker 每半小时先暂停 poll，刷新一次 `https://mp.weixin.qq.com/`，成功后再继续获取任务；设为 `0` 可关闭
 
 其中：
 
@@ -105,11 +106,12 @@ python main.py
 
 启动后 Worker 会持续：
 
-1. poll server
-2. 拿任务
-3. 抓取文章列表
-4. report 回 server
-5. 休眠后继续下一轮
+1. 到达 `HOMEPAGE_REFRESH_INTERVAL_SECONDS` 时，先刷新 `https://mp.weixin.qq.com/` 保持 cookie 活跃
+2. 刷新成功后 poll server
+3. 拿任务
+4. 抓取文章列表
+5. report 回 server
+6. 休眠后继续下一轮
 
 ---
 

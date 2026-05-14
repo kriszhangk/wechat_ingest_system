@@ -289,6 +289,12 @@ Server 提供管理页面，常用入口：
   - 空闲轮询间隔
   - 现支持环境变量：`WECHAT_INGEST_POLL_INTERVAL_SECONDS`
 
+- `HOMEPAGE_REFRESH_INTERVAL_SECONDS`
+  - 公众号后台首页保活刷新间隔，默认 `1800` 秒
+  - Worker 到达该间隔时会先暂停 poll server，刷新 `https://mp.weixin.qq.com/` 成功后再继续获取任务
+  - 设为 `0` 可关闭
+  - 现支持环境变量：`WECHAT_INGEST_HOMEPAGE_REFRESH_INTERVAL_SECONDS`
+
 - `PARAM_CACHE_TTL_SECONDS`
   - token / fingerprint / lang 缓存 TTL
   - 现支持环境变量：`WECHAT_INGEST_PARAM_CACHE_TTL_SECONDS`
